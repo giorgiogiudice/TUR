@@ -3,8 +3,11 @@
 
 > **Status: experiment finished (time box).** Pull request 123, branch
 > `exp/rehost`. The tables come from run 43778332673 (commit `b237162`),
-> shards e1, e2, e4, n1 and g1, and run 43768570046 (commit `cf933b6`) for shard e3. Every contact
-> sheet of those shards was looked at before a window was counted.
+> shards e1, e2, e4, n1 and g1, and run 43768570046 (commit `cf933b6`)
+> for shard e3. Every contact sheet of those shards was looked at before a
+> window was counted. GitHub Actions is now disabled for the owner's
+> account, so no further run is possible; section 13 says which fixes that
+> leaves untested.
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -902,4 +905,23 @@ has been measured.
   and review (section 9.2).
 - **One measurement per variant.** Memory and timing differences under
   about 10% are noise.
-- **Shard e3 of the final run** (AFFiNE, Heroic, Hyper, LosslessCut, Min, Tabby) is taken from run 43768570046 at `cf933b6`: the final run's e3 job was cancelled by the platform after nine minutes and its re-run had not started when this report was written. The fixes in `b237162` do not touch these applications' code paths.
+- **CI is unavailable.** GitHub Actions has been disabled for the owner's
+  account (a workflow dispatch answers 422, "Actions has been disabled for
+  this user"); no new run can start until that is resolved. Consequences,
+  plainly:
+  - **Shard e3 was not measured at the final commit.** Its rows (AFFiNE,
+    Heroic, Hyper, LosslessCut, Min, Tabby) come from run 43768570046 at
+    `cf933b6`: the final run's e3 job was cancelled by the platform after
+    nine minutes, and the re-run requested for it (run 43778332673,
+    second attempt) is queued and will not start. **The three fixes of
+    `b237162` are therefore untested on these six applications.** By
+    reading the code they cannot change them: none of the six has a
+    darwin-x64 per-platform package, an NW.js layout or a JVM start script.
+  - **Every other fix on the branch was measured**: `ac32eb0` in run
+    43754196480, `cf933b6` in 43768570046, `b237162` in 43778332673 (shards
+    e1, e2, e4, n1, g1).
+  - **The gaps listed above are neither fixed nor tested**, and neither is
+    the corpus note that still calls ILSpy a WPF control (correcting
+    `corpus.json` would start a run).
+  - The report commit itself (documentation only) starts no
+    measurement.
