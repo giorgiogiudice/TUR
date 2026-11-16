@@ -1,19 +1,17 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-inwin-1 — TUR as the solid floor under the person's own Windows, seen from the Windows side (experiment)
 
-> **Status: first run read. H1, H2, H3 and H4 hold; H5 holds as far as
-> measured (every listed item is readable from the files except Start
-> pins, carried by the agent: the registered fallback), but its shortcut
-> criterion is NOT RUN.** Run
-> 43552339780 on `a0aa992` (15 November 2026) measured sections 3.1, 3.2,
-> 4.1, 4.2, 6.1 and 7. Reading it exposed defects in the experiment's own
-> code (section 3.4), fixed before a second run; that second run was
-> queued behind the repository's other work when this was written and is
-> NOT RUN here, as are the measurements that depended on the fixes:
-> the agent below an elevated program's rights (3.3), a covered window's
-> content (4.3), the shortcut reader against Windows (7.3), a moved desktop
-> icon (7.3), the machine's registry files (7.1) and the checker's
-> additional routes (6.1).
+> **Status: both runs read; every hypothesis settled.** H1, H2 and H3
+> hold. H4 holds for the disk layout but **is killed for BitLocker at the
+> person's own level**: no route gave BitLocker's state to a program at
+> medium integrity without administrator rights (section 6.1). H5 holds:
+> every listed item is read from the files without Windows except Start
+> pins, which are carried by the agent (the registered fallback); the
+> shortcut reader agrees with Windows on 91.7 to 95.9 % of targets. For
+> dualrun's H5(b): a covered window's own content was obtained, identical
+> to the window shown in front, for every kind of window (section 4.3).
+> Runs 43552339780 on `a0aa992` and 43755897776 on `000e7a1` (15 and 16
+> November 2026).
 
 Two things were added to the experiment after the first commit and before
 any run, and are registered here for that reason:
@@ -69,7 +67,7 @@ BUILD
 TESTS
 - Integration: workflow exp-inwin, run 43552339780 on a0aa992: success
   (jobs bridge; see and way-in on windows-2025, windows-2022,
-  windows-11-arm). Second run on the fixes: queued, NOT RUN at hand-back
+  windows-11-arm); run 43755897776 on 000e7a1: success (the same jobs)
 - Boot tests: NOT RUN (nothing here can affect boot)
 - Hardware tests: NOT RUN (hosted runners; no PC)
 
@@ -150,11 +148,10 @@ nearest available stand-in, named as such wherever it appears.
   rights and tabulates what each could read.
 - `.github/workflows/exp-inwin.yml`: three jobs, all on Windows runners.
 - Runs: **43552339780** on `a0aa992` (the first; read on 15 November 2026
-  after its one-day pictures had expired). Its reading called for the fixes
-  listed in section 3.4 (commits `83c8528`, `0531d1f` and the one that
-  carries this text); the **second run**, on those fixes, was queued behind
-  the repository's other work when this was written and is NOT RUN here.
-  Every number below is from run 43552339780.
+  after its one-day pictures had expired) and **43755897776** on
+  `000e7a1` (the second, after the fixes listed in section 3.4; read on 16
+  November 2026 within its pictures' day). Where a number differs between
+  them, the text names the run; the counts of section 3.1 were identical.
 - Pictures and full reads of Microsoft's applications are kept for one day
   only, to count by eye; kept artifacts hold counts, rectangles, paths and
   hashes. Applications are fetched from their publishers by hash and thrown
@@ -169,7 +166,7 @@ window tree; `bridge-msaa`; `bridge-uia`). The bridge is
 the runner's mingw-w64 gcc in job `bridge` (64-bit, with its hook library;
 it answered every request on all three runners, the ARM one included, where
 it ran as an x64 program under Windows' emulation). Counts are from run
-43552339780.
+43552339780 and were the same in run 43755897776 except Firefox's.
 
 ### 3.1 What it sees (H1)
 
@@ -192,7 +189,8 @@ runner in run 43552339780 (section 3.2).
 | Explorer, a folder of four items (4) | 4 | 0 | 0 | 4 | 4 |
 | TUR's form page in Edge (7) | 7 | 0 | 0 | 7 | 7 |
 | TUR's form page in Chrome (7) | 7 | 0 | 0 | 7 | 7 |
-| TUR's form page in Firefox (7) | 0 | 0 | 0 | 0 | 0 |
+| TUR's form page in Firefox (7), run 43552339780 | 0 | 0 | 0 | 0 | 0 |
+| TUR's form page in Firefox (7), run 43755897776 | 7 | 0 | 0 | 7 | 7 |
 
 **Windows without a list.** The pictures of Microsoft's applications were
 kept for one day and had expired before anyone read run 43552339780, so
@@ -212,6 +210,29 @@ score.
 
 WordPad is not part of Server 2025 or of this Windows 11: its ribbon was
 read on Server 2022 only.
+
+**Microsoft's applications, counted by eye (run 43755897776).** The
+one-day pictures of run 43755897776 were read within their day. Counted:
+every control a person can operate in the window as pictured (buttons,
+fields, menus, tabs, list rows, links, scroll bars, the window's own
+caption buttons), set against the outline UI Automation drew for each
+control it reported. On the ARM runner the pictures were again of Windows'
+first-sign-in window (section 10.10), so none is counted there.
+
+| Window | Runner | Controls a person sees | Outlined by UI Automation |
+|---|---|---|---|
+| Notepad | Server 2022 | 12 | 12 |
+| Notepad, File menu | Server 2022 | 8 | 8 |
+| Settings, first page | Server 2022 | 14 | 14 |
+| Settings, Apps page | Server 2022 | 18 | 18 |
+| Settings, first page (Windows 11 design) | Server 2025 | 23 | 23 |
+| WordPad with its ribbon | Server 2022 | 48 | 48 |
+| **Together** | | **123** | **123** |
+
+The window tree outlined 6 of Notepad's 12 and none of Settings'; MSAA one
+or none in Settings. UI Automation's extra elements beyond these counts
+are parts of one control (a split button's arrow, a combo box's text) and
+headings.
 
 **What the numbers say.**
 
@@ -237,8 +258,10 @@ read on Server 2022 only.
    wait for the structure-changed event, before it reports a page empty.
 5. *Firefox's 0 of 7 is not Firefox's accessibility*: its first-run
    welcome window was open over the page (it is modal: the page beneath is
-   hidden from accessibility, as it is from a person). The second run starts
-   Firefox with the preferences that skip it (section 3.4).
+   hidden from accessibility, as it is from a person). Started with the
+   preferences that skip it, run 43755897776 found 7 of 7 page controls in
+   Firefox on every runner (29 controls in all), after the same empty first
+   read as Chromium's.
 6. *The bridge's own UI Automation tier* reports what native UI Automation
    reports, within two controls, at two to ten times the cost (it adds the
    pipe and its own tree walk). On real Windows the product agent should
@@ -247,11 +270,14 @@ read on Server 2022 only.
 7. *Cost*: one UI Automation read of a window took 4 to 392 ms on the x64
    runners (median about 60 ms; Explorer was the slowest) and up to 1.2 s
    on ARM (TUR's test window 1232 ms, Explorer 1153 ms).
+8. *Microsoft's own applications*: 123 of 123 controls a person sees,
+   counted by eye, were reported by UI Automation (table above).
 
 **H1: holds.** Kill: under 80 % of winsee's listed controls found by UI
 Automation or the window tree in the four applications (measured: 100 %
 on every runner), or under half of the page's seven controls in every
-browser (measured: 7 of 7 in Edge and in Chrome).
+browser (measured: 7 of 7 in Edge, Chrome and, in run 43755897776,
+Firefox).
 
 ### 3.2 Whether its actions arrive (H2)
 
@@ -289,56 +315,85 @@ ask the tier that acted.
 
 ¹ The check looked for "1 object selected" in the name of 7-Zip's status
 bar, which UI Automation does not give; whether the row was selected is
-unknown. The second run asks the list view itself (`LVM_GETITEMSTATE`).
-² Same tier only. The second run asks the shell's own model of the folder window
+unknown. Run 43755897776 asked the list view itself (`LVM_GETITEMSTATE`): arrived.
+² Same tier only. Run 43755897776 asked the shell's own model of the folder window
 (`Shell.Application`), which does not go through UI Automation.
 ³ The picture of the screen did not change because Windows 11's first
 sign-in window covered the whole screen on the ARM runner for the entire
 run (section 10.10); UI Automation saw 15 new names on the page, so the page
-probably opened. The second run hides that window first and also compares the
+probably opened. Run 43755897776 also compared the
 window's own picture.
 ⁴ No action was sent: the page's controls were behind Firefox's welcome
 window (section 3.1).
 ⁵ Counted as arrived in run 43552339780's total although nothing checked
 it; the honest count on Server 2022 is 22 of 24 checked.
 
-On the ARM runner the File menus of Notepad and Notepad++ refused UI
-Automation's ExpandCollapse pattern (`COMError 0x80131509`, "invalid
-operation"); the same windows on x64 accepted it. Whether the cover or ARM
-is the cause is what the second run tells, which also falls back to the menu's
-default action when expanding is refused.
+**Run 43755897776, with the checks of section 3.4.** Every action is now
+checked by a route other than the one that acted.
 
-**H2 holds on the first run.** Kill: a kind of application in which no
-action arrives. In each kind at least one action arrived and was checked
-independently on every runner where the kind exists: classic Win32 (by
-control messages and the application's own log), Explorer (the title),
-modern (the picture; on ARM, see ³), web pages in two of three browsers
-(the page's own script), the installer (`IsWindowEnabled`), the ribbon
-(the picture, Server 2022 only).
+| Runner | Arrived | Not arrived |
+|---|---|---|
+| Server 2025 | **22 of 22** | — (Notepad++'s Settings menu: both ExpandCollapse and the default action refused with `0x80131509`, so no action was sent; not counted) |
+| Server 2022 | **25 of 25** | — |
+| Windows 11 ARM | **21 of 23** | Notepad's File menu and Notepad++'s Settings menu: ExpandCollapse and the default action both refused (`COMError 0x80131509`) |
+
+What changed from the first run: 7-Zip's selection arrived on all three
+(`LVM_GETITEMSTATE`: row 1 selected, the others not); Explorer's selection
+is confirmed by the shell's own record of the folder window (1 selected,
+"beta"); Firefox's form arrived (the page's script set the title); PuTTY's
+tree row is confirmed by the window tree (8 visible child windows of the
+Colours panel); WordPad's typing is confirmed by `WM_GETTEXT` of its
+rich-edit control; Settings on ARM is confirmed by the window's own picture
+(26.7 % changed) while the screen showed only the first-sign-in window.
+
+**Menus are the one weak spot.** Opening a classic menu bar's menu through
+UI Automation failed on Windows 11 ARM in both runs, with the first-sign-in
+window hidden or not, and once on Server 2025 (Notepad++, run 43755897776;
+the same action arrived there in run 43552339780). The product agent opens
+classic menus by the window tree instead (the winsee bridge's
+`WM_COMMAND` route arrived on every runner) or by the keyboard, and falls
+back between them.
+
+**H2: holds.** Kill: a kind of application in which no action arrives. In
+both runs, in every kind (classic Win32, Explorer, modern, web page in
+every browser, installer, ribbon), actions arrived and were checked
+independently on every runner where the kind exists.
 
 ### 3.3 The agent below the program's rights
 
-**NOT RUN.** The test exists (`agent/lower.py`, started from `seer.py` at
-medium integrity with `CreateProcessAsUser` and through `runas
-/trustlevel`, against a Notepad started with the job's administrator
-rights), and both lower agents started on all three runners, but each
-stopped at its first step, the probe of its own token, on the buffer-size
-error of section 10.11, and wrote no finding. The second run has the probe
-fixed and the remaining steps independent of it: UI Automation read and
-`SetValue`, `WM_GETTEXT` and `WM_SETTEXT`, keys typed with `keybd_event`,
-and a posted `WM_CLOSE`. What Windows documents, to be confirmed by that
-run: User Interface Privilege Isolation lets a lower process read a higher
-window's title and send it read-only messages, and drops input and most
-messages that change it; UI Automation clients below the target's level
-get a reduced view. If confirmed, the agent at the person's level can see
-but not operate an elevated window, and operating one needs the "UI
-access" right, which needs a signed program installed in a protected
-folder (section 11, decision 2).
+Run 43755897776: a Notepad started with the job's administrator rights
+(high integrity), and the agent's `lower.py` started twice against it.
+Identical on the three runners except the one cell marked.
+
+| What the agent tried | At medium integrity (`CreateProcessAsUser`, the level of an ordinary program on a person's desktop) | Through `runas /trustlevel:0x20000` |
+|---|---|---|
+| Its own rights, as recorded | integrity **medium**, Administrators enabled | integrity **high**, Administrators deny-only |
+| Read the window's title | yes | yes |
+| Enumerate its child windows | yes | yes |
+| UI Automation read | **2 elements** (the frame only) | 27 elements (30 on ARM) |
+| UI Automation `SetValue` into the text | — (nothing to act on) | arrived |
+| `WM_SETTEXT` into the editor | **refused** (error 5, access denied) | arrived |
+| Keys typed (`keybd_event`) | **did not arrive** | arrived on Server 2022 only (the foreground was not granted on the others) |
+| Post `WM_CLOSE` | **refused** | arrived |
+
+So User Interface Privilege Isolation does what Microsoft documents: an
+agent at the person's level sees an elevated window's title and nothing
+inside it, and can neither type into it nor close it. (The `runas
+/trustlevel` column is not a lower agent at all: it keeps high integrity
+and only loses the Administrators group, and UIPI goes by integrity.)
+
+**Consequence for the product.** The session part of the agent can read
+and operate everything the person runs normally, and nothing they started
+"as administrator", unless it holds Windows' "UI access" right, which
+Windows grants only to a program that is signed and installed in a
+protected folder (`Program Files` or `System32`). Without a code-signing
+identity (section 11, decision 2), P@x must say plainly that it cannot see
+an elevated window, and show the guest's own screen for it.
 
 ### 3.4 What reading run 43552339780 changed in the experiment
 
-Fixed in commits `83c8528` and `0531d1f` and measured again by the second
-run (NOT RUN at the time of writing):
+Fixed in commits `83c8528` and `0531d1f` and measured again by run
+43755897776:
 
 | Found in the first run | Fix |
 |---|---|
@@ -419,23 +474,44 @@ protocol's window channel.
 
 ### 4.3 A covered window's content, asked of the window (for dualrun's H5b)
 
-**NOT RUN (void in run 43552339780).** The measurement put each kind of
-window in front, pictured it from the screen as a reference, covered it
-with Notepad and asked it for its own picture (`PrintWindow` with
-`PW_RENDERFULLCONTENT`). It placed the windows with `SWP_NOZORDER` and
-relied on `SetForegroundWindow`, which a background process is often
-refused, so most "in front" pictures were of whatever lay on top (the
-share of pixels differing between a window's own picture and the screen
-"in front" was 0.28 to 1.0 where it should be near 0), and on ARM the
-first-sign-in window covered everything. One row is consistent on both x64
-runners: Edge, whose own picture in front matched the screen exactly
-(0.0), and whose own picture while covered differed from that reference in
-3.1 % of pixels and was 0.5 % black; one capture took 32 ms at the median
-and 48 ms at most for 760 × 560 pixels. That suggests a covered Chromium
-window does give its content; it is one window and the cover was mostly
-white over a mostly white page, so it is not counted as a result. The
-second run repeats the measurement with every placement checked and the
-pictures kept for a day (section 3.4).
+Run 43755897776. Each kind of window was placed at 760 × 560 and raised;
+the screen was pictured as the reference and the window was asked for its
+own picture (`PrintWindow` with `PW_RENDERFULLCONTENT`); then Notepad was
+raised over it and the window was asked again, eight times. "On top" and
+"covered" were checked with `WindowFromPoint` at five points.
+
+| Window | Server 2022: own picture covered vs the screen's reference | Server 2025: own picture covered vs own picture in front | ARM: the same | Screen while covered differs from the reference | One capture, median / max |
+|---|---|---|---|---|---|
+| TUR's test window (classic Win32) | 0.0 % | 0.0 % | 0.0 % | 76–77 % | 32–47 / 63 ms |
+| Settings (XAML) | 0.0 % | 0.0 % | 0.0 % | 3–97 % | 16 / 32 ms |
+| Edge (Chromium, composited) | 0.0 % | 3.1 % | 3.1 % | 7 % | 16–32 / 33 ms |
+| Explorer | 5.3 %¹ | 0.0 % | 0.0 % | 22–27 % | 30–47 / 48 ms |
+
+Only Server 2022's placements passed every check (on top for the
+reference: yes; covered by the cover: yes), so only there is the covered
+picture compared with the screen itself, and it is **identical** for three
+kinds of window. On Server 2025 a Windows notification ("pin this
+application?") stayed above every window in one corner, and on ARM
+Windows' first-sign-in window stayed above everything (hiding its proxy
+window did not remove it): the checks failed there, but the window's own
+picture taken under the cover equals its own picture taken in front, and
+the pictures (kept one day) show the whole window under the notification
+and under the first-sign-in window. ¹ Explorer's 5.3 % on Server 2022 is
+the same between its two own pictures: Explorer changed between captures
+(it is not hidden content). Edge's 3.1 % is a change between its own two
+pictures, not examined.
+
+**A minimised window gives no content**: `PrintWindow` returns only its
+160 × 28 caption, on all three runners.
+
+**For dualrun's H5(b): its kill criterion is not met.** The content of a
+covered window was obtained from inside Windows, without Remote Desktop,
+for a classic window, a XAML application, Chromium and Explorer, on
+Windows Server 2022, Server 2025 and Windows 11 on ARM, at 16 to 63 ms per
+760 × 560 capture by polling. A minimised window must be restored (off
+screen, or behind) to be captured. Not measured: the Windows Graphics
+Capture API (frames pushed, not polled), a GPU-accelerated game or video,
+a Home edition.
 
 ## 5. The interface between TUR and the guest agent (proposal; not built)
 
@@ -455,10 +531,12 @@ already decided, as the winsee bridge does under Wine.
   when Windows runs by itself).
 - A *session part* that runs on the person's desktop with the person's
   rights. It reads windows, performs actions and reports events.
-  Section 3.3 measures what an agent at the person's level can do to a
-  window of a program given administrator rights (NOT RUN so far); that
-  result decides whether the session part needs Windows' "UI access" right
-  (a signed program in a protected folder).
+  **(changed)** Section 3.3 measured it: at the person's level the agent
+  sees an elevated window's title and nothing else, and cannot act on it.
+  Operating elevated windows needs Windows' "UI access" right (a signed
+  program in a protected folder); without it the session part reports such
+  a window as "elevated: not visible to P@x" and TUR shows the guest's
+  screen for it.
 
 **Transport (changed).** dualrun starts an unmodified Windows, which has no
 virtio drivers, so the first channel is the one dualrun already uses: a
@@ -495,7 +573,7 @@ one is noticed.
 | | `window.read` | one window's controls in tur-pax-a11y's node model, **(changed)** by UI Automation first and the window tree for what UI Automation leaves unnamed (section 3.1: toolbar buttons with only an icon), with a node budget, visible controls only unless asked; **re-read once after about two seconds when a browser window answers with an empty page** (section 3.1: Chromium builds its page tree on the first request) |
 | | `element.act` | an action on a node, **with what TUR believes the node is** (name, kind, rectangle); the agent re-reads the node and refuses if it is no longer that |
 | | `point.inspect` | what is at a screen point (winsee's rule for anything proposed by vision) |
-| | `window.content` | the pixels of one window, also when it is covered (section 4.3), on the private link |
+| | `window.content` | the pixels of one window, also when it is covered (section 4.3: identical to the window in front; 16–63 ms per 760 × 560 capture), on the private link; a minimised window has none |
 | | `icon.get` | a window's or an application's icon as raw pixels with a size (32 × 32 at 32 bits from every window that had one, section 4.1) |
 | | `apps.list`, `open` | the Start menu's entries (section 7: 172–217 on the runners); start one; open a file with its default application |
 | | `desktop.read` **(new)** | the carry-over manifest of section 7.4, read by the agent from the running Windows, for what the disk cannot give (Start pins on Windows 11) |
@@ -544,22 +622,25 @@ compromised guest reaches out.
 
 ### 6.1 What a checker can read, and with which rights (H4)
 
-`checker/check.py` through `rights.py`, on each runner three times:
-*elevated* (the job's administrator with a full token), *restricted* (the
-same account through `runas /trustlevel:0x20000`, the nearest stand-in for
-a program started by a person who has not answered a consent prompt) and
-*standard* (a new local account that is not an administrator, started with
-`CreateProcessWithLogonW`). Run 43552339780 asked 34 facts (and the token's own rights, which failed: section 10.11);
-the second run adds 5 routes (`partitions (WMI)`, `volume-on-disk (IOCTL)`,
-`partitions (IOCTL)`, `shrink-room (NTFS volume data)`, `volume-dirty
-(FSCTL)`, the last four with the device opened with no access rights at
-all); it is NOT RUN.
+`checker/check.py` through `rights.py`, on each runner three times. The
+levels, as run 43755897776 recorded them from each process's token:
 
-Each cell: *read*; *read (differs)*: answered, but not what the elevated
-run read; *empty*: answered without refusing, with nothing in the answer;
-*refused*: access denied; *absent*: the value does not exist on that
-machine; *failed*: another error. Where the three runners agree one cell
-is shown; otherwise S25, S22 and A11 are named.
+- *elevated*: the job's administrator, full token, **high** integrity;
+- *restricted*: the same account through `runas /trustlevel:0x20000`:
+  **still high integrity**, with the Administrators group deny-only. It is
+  not what the report first called it (a program started from a person's
+  desktop without a consent prompt runs at medium integrity);
+- *standard*: a new local account that is not an administrator, started
+  with `CreateProcessWithLogonW`: **medium** integrity. This is the level
+  of an ordinary program on a person's desktop, and the one H4 is about;
+  its per-user facts describe a new, empty profile.
+
+Run 43755897776: 39 facts (34 as in run 43552339780, which gave the same
+answers, and 5 new routes). Each cell: *read*; *read (differs)*: answered,
+but not what the elevated run read; *empty*: answered without refusing,
+with nothing in the answer; *refused*: access denied; *absent*: the value
+does not exist on that machine; *failed*: another error. Where the three
+runners agree one cell is shown.
 
 | Fact | Route | Elevated | Restricted | Standard account |
 |---|---|---|---|---|
@@ -576,7 +657,11 @@ is shown; otherwise S25, S22 and A11 are named.
 | volumes | `Get-Volume (Storage module)` | read | read | read |
 | disks | `Get-Disk` | read | read | read |
 | partitions | `Get-Partition` | read | empty | read |
-| shrink-room | `Get-PartitionSupportedSize` | S25 read; S22 failed; A11 read | failed | failed |
+| partitions (WMI) | `Win32_DiskPartition` | read | read | read |
+| volume-on-disk (IOCTL) | `IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS on the volume, opened with no access` | read | read | read |
+| partitions (IOCTL) | `IOCTL_DISK_GET_DRIVE_LAYOUT_EX on the disk, opened with no access` | read | read | read |
+| shrink-room | `Get-PartitionSupportedSize` | read | failed | failed |
+| shrink-room (NTFS volume data) | `FSCTL_GET_NTFS_VOLUME_DATA on the volume, opened with no access` | failed | failed | failed |
 | bitlocker (shell property) | `System.Volume.BitLockerProtection` | read | read | read (differs) |
 | bitlocker (cmdlet) | `Get-BitLockerVolume` | read | refused | refused |
 | bitlocker (manage-bde) | `manage-bde -status` | read | refused | refused |
@@ -586,6 +671,7 @@ is shown; otherwise S25, S22 and A11 are named.
 | hibernation-file | `the file itself` | read | read | read |
 | sleep-states (powercfg) | `powercfg /a` | S25 read; S22 failed; A11 read | S25 read; S22 failed; A11 read | S25 read; S22 failed; A11 read |
 | volume-dirty (fsutil) | `fsutil dirty query` | read | refused | refused |
+| volume-dirty (FSCTL) | `FSCTL_IS_VOLUME_DIRTY on the volume, opened with no access` | failed | failed | failed |
 | recovery-environment (reagentc) | `reagentc /info` | read | refused | refused |
 | firmware-boot-entries (bcdedit) | `bcdedit /enum firmware` | read | refused | refused |
 | tpm | `Get-Tpm` | read | empty | empty |
@@ -598,53 +684,52 @@ is shown; otherwise S25, S22 and A11 are named.
 | clock-is-utc | `HKLM\SYSTEM\...\TimeZoneInformation` | read | read | read |
 | device-encryption-ready | `Win32_Tpm` | read | refused | refused |
 
-Run 43552339780 itself labelled `partitions` (restricted) and `tpm` (both
-lower levels) "read"; the table above applies the corrected rules to its
-recorded answers. Values worth knowing: the shell's BitLocker property
-answered 2 (not protected) to the administrator and the restricted token on
-all three runners and 0 to the new standard account; `Get-Partition` under
-the restricted token answered with nothing at all, and to the new standard
-account with every partition; Windows' own shrink estimate took 51 s on two
-runners and over 90 s on Server 2022 (it timed out), and only an
-administrator gets it; `powercfg /a` fails on Server 2022.
+**The new routes.** `IOCTL_DISK_GET_DRIVE_LAYOUT_EX` on the disk opened with
+no access rights gave the whole partition table at every level, on every
+runner, in under half a millisecond: the style, each partition's offset,
+length, type GUID, partition GUID and attributes (Server 2025: Microsoft
+reserved, EFI system, C:; Server 2022 and ARM: reserved, Windows recovery,
+EFI system, C:). `IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS` names the disk and
+offset of C: likewise, and `Win32_DiskPartition` answers every level. The
+two file-system controls (`FSCTL_IS_VOLUME_DIRTY`,
+`FSCTL_GET_NTFS_VOLUME_DATA`) failed at every level, the administrator's
+included, with "invalid function": a volume opened with no access rights is
+not a volume handle the file system answers. Windows' own shrink estimate
+took 47 to 57 s and answers only an administrator.
 
-**What the checker would say, from what it could read.** Server 2025: only
-31.0 GiB free on C:, under the installer's 41 GiB. Server 2022: nothing
-stands in the way. Windows 11 ARM: Fast Startup is on.
+**What the checker would say.** Server 2025: only 31.0 GiB free on C:,
+under the installer's 41 GiB. Server 2022: nothing stands in the way.
+Windows 11 ARM: Fast Startup is on.
 
-**H4: holds, with one gap for the second run to close.** Kill: BitLocker's
-state or the disk layout readable only with administrator rights.
+**H4: holds for the disk layout; killed for BitLocker at medium
+integrity.** Kill: BitLocker's state or the disk layout readable only with
+administrator rights.
 
-- *BitLocker*: the shell's property (`System.Volume.BitLockerProtection`)
-  answered the restricted token, which is the person's own account without
-  its administrator rights: the realistic case of a program started from
-  their desktop. Every other route (`Get-BitLockerVolume`, `manage-bde`,
-  `Win32_EncryptableVolume`) was refused below administrator. The new
-  standard account got 0 ("unknown") where the others got 2: the property
-  depends on the asking session, so the checker must say "could not tell"
-  on 0, never "not encrypted". **An encrypted volume was not on any
-  runner: that the property reads 1 for one is NOT RUN.**
-- *The disk layout*: `Get-Disk` (style, size, partition count, largest free
-  extent) and `Get-Volume` answered every level; `Get-Partition` answered
-  the standard account but gave the restricted token nothing. So the
-  layout is readable without administrator rights, and the route must be
-  chosen by level; the second run tests routes that ask the disk itself.
-- *Read only with administrator rights*: Secure Boot by the cmdlet (the
-  registry route answers everyone), the volume's dirty bit by `fsutil`,
+- *The disk layout* is readable by a medium-integrity program that is not
+  an administrator, by three routes (`Get-Disk`, `Win32_DiskPartition`, the
+  drive-layout control), the last asking the disk itself. `Get-Partition`
+  is not one to rely on: it answered the medium account but gave the
+  high-integrity restricted token nothing at all.
+- *BitLocker's state*: the shell's property answered 2 ("off") to both
+  high-integrity levels and **0 ("unknown") to the medium account**, in
+  both runs, on all three runners; `Get-BitLockerVolume`, `manage-bde` and
+  `Win32_EncryptableVolume` refused everything below the administrator.
+  No route gave a program at the person's own level BitLocker's state. One
+  doubt remains: the medium account was a new account started outside the
+  interactive logon, and the 0 may come from that session rather than from
+  its rights; a program started from a person's desktop is NOT RUN. An
+  encrypted volume (the property reading 1) is not on any runner: NOT RUN.
+- *Read only with administrator rights*, in both runs: Secure Boot by the
+  cmdlet (the registry route answers everyone), the dirty bit by `fsutil`,
   Windows RE's state, firmware boot entries, the TPM's state, Windows'
-  shrink estimate, the display configuration. None of them decides
-  whether TUR can be installed; each can be re-checked by TUR's installer,
-  which has the whole machine.
+  shrink estimate, the display configuration.
 
-So the checker can say its first sentence without a consent prompt.
-
-**What the first run's table got wrong, and the second corrects.** Run
-43552339780 called three answers "read" that told nothing: `Get-Partition`
-under the restricted token returned nothing at all (no error, no rows);
-`Get-Tpm` returned `null` for every field to both lower levels; and the
-shell's BitLocker property returned 2 to the administrator and the
-restricted token but 0 to the new standard account. The table now marks
-these.
+**What it changes in "get TUR" (section 6.2).** The first, read-only step
+can state everything that decides except BitLocker without a consent
+prompt. For BitLocker it says "not known yet" unless the shell answers 1 or
+2, and the one consent prompt of step 3 (which Windows needs anyway to
+suspend BitLocker) comes before that sentence. The person is never told
+"not encrypted" from a 0.
 
 ### 6.2 "Get TUR", as a design (not built)
 
@@ -700,7 +785,8 @@ set-up. None of that changes its safety rules.
 
 `carry/carry.py` through `rights.py`, as for the checker, after a fixture
 of TUR's own was put on each runner's desktop (a test wallpaper with fit
-"6", two `.lnk` shortcuts and one `.url`). Run 43552339780; the standard
+"6", two `.lnk` shortcuts and one `.url`). Run 43755897776 (run
+43552339780 gave the same answers for the probes it had); the standard
 account's per-user answers describe its own new, empty profile, so its
 "read (differs)" and "absent" are expected there.
 
@@ -718,28 +804,31 @@ account's per-user answers describe its own new, empty profile, so its
 | lock-screen (machine record) | `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\SystemProtectedUserData\<SID>\AnyoneRead\LockScreen` | absent | absent | absent |
 | lock-screen (picture files) | `C:\ProgramData\Microsoft\Windows\SystemData\<SID>\ReadOnly\LockScreen_*` | absent | absent | absent |
 | desktop-shortcuts | `the Desktop folder and Public\Desktop: .lnk ([MS-SHLLINK]) and .url (text)` | read | read | read (differs) |
-| desktop-shortcuts-as-windows-reads-them | `WScript.Shell on the same files` | failed | failed | failed |
+| desktop-shortcuts-as-windows-reads-them | `WScript.Shell on the same files` | read | read | read (differs) |
 | desktop-icons-live | `the desktop's list view, through UI Automation` | read | read | read |
 | desktop-icon-layout | `HKCU\Software\Microsoft\Windows\Shell\Bags\1\Desktop: IconLayouts, ItemPos<width>x<height>x<dpi>(<n>), FFlags, IconSize` | read | read | absent |
+| desktop-icon-layout (decoded) | `HKCU\Software\Microsoft\Windows\Shell\Bags\1\Desktop: IconLayouts, decoded by layout.py and set beside the desktop's own positions` | read | read | absent |
 | desktop-system-icons | `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel` | absent | absent | absent |
 | taskbar-pinned-shortcuts | `%AppData%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*.lnk` | S25 read; S22 read; A11 empty | S25 read; S22 read; A11 empty | empty |
-| taskbar-order | `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband: Favorites` | S25 read; S22 read; A11 absent | S25 read; S22 read; A11 absent | absent |
+| taskbar-order | `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband: Favorites (order), the pinned folder (the shortcuts)` | S25 read; S22 read; A11 absent | S25 read; S22 read; A11 absent | absent |
 | start-pins (Windows' export) | `Export-StartLayout` | read | read | failed |
 | start-pins (files) | `%LocalAppData%\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\start*.bin; HKCU\...\CloudStore` | read | read | read (differs) |
 | start-menu-shortcuts | `%ProgramData%\Microsoft\Windows\Start Menu\Programs and %AppData%\...\Start Menu\Programs` | read | read | read (differs) |
-| start-menu-shortcuts-as-windows-reads-them | `WScript.Shell on the same files` | failed | failed | failed |
+| start-menu-shortcuts-as-windows-reads-them | `WScript.Shell on the same files` | read | read | S25 read; S22 read (differs); A11 read |
 | start-apps | `Get-StartApps (shell:AppsFolder)` | read | read | read (differs) |
 | packaged-applications | `Get-AppxPackage; on disk: Program Files\WindowsApps\*\AppxManifest.xml` | read | read | read (differs) |
 | drive-letters | `HKLM\SYSTEM\MountedDevices: \DosDevices\X:` | read | read | read |
 | volume-labels | `the label is in the file system itself; GetVolumeInformationW` | read | read | read |
 | partitions | `Get-Partition` | read | empty | read |
 | drive-label-overrides | `HKLM\SOFTWARE\...\Explorer\DriveIcons\<letter>\DefaultLabel` | empty | empty | empty |
+| letters-against-volumes | `MountedDevices set beside the volumes and partitions present` | read | read (differs) | read |
 | hidden-drives-policy | `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer: NoDrives` | absent | absent | absent |
 | known-folders (registry) | `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders` | read | read | read |
 | known-folders (Windows) | `the shell` | read | read | read (differs) |
 | onedrive | `HKCU\Software\Microsoft\OneDrive\Accounts\Personal: UserFolder` | absent | absent | absent |
 | associations | `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\<.ext>\UserChoice: ProgId; HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\<protocol>\UserChoice; HKCR` | read | read | S25 read; S22 read; A11 read (differs) |
 | installed-applications | `HKLM and HKCU ...\CurrentVersion\Uninstall\*; HKLM\...\App Paths` | read | read | read |
+| accounts-with-profiles | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList (the file SOFTWARE); Users\<name>\NTUSER.DAT` | read | read (differs) | read (differs) |
 | account-name | `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI: LastLoggedOnDisplayName` | absent | absent | absent |
 | account-kind | `Get-LocalUser: PrincipalSource` | read | read | read |
 | account-microsoft-identity | `HKCU\Software\Microsoft\IdentityCRL\UserExtendedProperties` | absent | absent | absent |
@@ -757,6 +846,7 @@ account's per-user answers describe its own new, empty profile, so its
 | display-scaling (registry) | `HKCU\Control Panel\Desktop\PerMonitorSettings\<monitor>: DpiValue; ...\WindowMetrics: AppliedDPI` | absent | absent | absent |
 | display-layout (registry) | `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration` | read | refused | refused |
 | registry-file-holds-the-same | `reg save HKCU, reg load, compare` | read | refused | refused |
+| machine-registry-files-hold-the-same | `reg save HKLM\SYSTEM and HKLM\SOFTWARE, read by regf.py, compare` | read | refused | refused |
 
 **The registry file against the running Windows.** The person's registry
 (`reg save HKCU`, administrator only while Windows runs) was read back two
@@ -767,14 +857,31 @@ compared: 14 of 14 listed values on the x64 runners and 13 of 13 on ARM
 every value of six whole keys (`Control Panel\Desktop`,
 `Control Panel\International`, `User Shell Folders`, `Explorer\Advanced`,
 `Environment`, `Control Panel\Colors`): 168 of 168, 163 of 163 and 163 of
-163. The registered kill for this addition (any listed value differs or
-cannot be read) did not happen. The machine's files (SYSTEM, SOFTWARE) are
-compared in the second run (NOT RUN).
+163. Run 43755897776 compared 25 listed values (24 on ARM), now including
+four default-application choices, two more known folders, the wallpaper
+history and the colourisation colour: 25 of 25, 25 of 25 and 24 of 24 both
+ways, and again every value of the six keys.
+
+**The machine's files.** Run 43755897776 saved SYSTEM (10–18 MiB, 0.1 s) and
+SOFTWARE (174–203 MiB, 1.8–2.5 s), read them with `regf.py` (5–90 ms) and
+compared: on every runner `Select\Current`, the time zone, the UTC clock
+flag, Fast Startup and the computer name (SYSTEM, through
+`ControlSet00N`), and Windows' build, edition and version and the program
+folder (SOFTWARE) were all the same, 9 of 9; every drive letter in
+`MountedDevices` was byte-identical (3 of 3); the profile list held the
+same accounts (5 of 5, 6 of 6, 6 of 6) and the uninstall list the same
+number of entries (265, 257, 263). Saving a machine file needs an
+administrator while Windows runs; TUR's installer reads the files from the
+disk when Windows is not running and needs no one's rights. The registered
+kill for this addition (any listed value differs or cannot be read) did not
+happen.
 
 **Drive letters.** `MountedDevices` recorded C: by partition GUID (the GUID
 `Get-Partition` reports for C:), D: by MBR signature and offset, and E: by
-a device path, on all three runners. On ARM there was no D: volume at all:
-the record keeps letters of volumes that are gone (section 7.4, rule 1).
+a device path, on all three runners. On ARM there was no D: volume at all,
+and E: was absent everywhere: the record keeps letters of volumes that are
+gone (section 7.4, rule 1). The GPT letter's partition GUID was found among
+the partitions present on every runner.
 
 ### 7.2 Where each thing lives on the disk (for `dualrun` and the installer)
 
@@ -835,10 +942,23 @@ from the file without Windows (section 7.1).
 folder and in both Start menu folders without error, on all three
 runners, with targets, arguments, working folders and icons (the test
 shortcut's `notepad.exe`, its argument, `C:\Windows` and `shell32.dll,23`
-came back exactly). The comparison with what Windows says of the same files
-(`WScript.Shell`) failed in run 43552339780 on a PowerShell detail (section
-3.4), so **H5's shortcut criterion (90 % of targets) is NOT RUN**; the
-second run measures it. What the first run shows without Windows' side:
+came back exactly). Run 43755897776 set each `.lnk` beside what Windows
+itself says of the same file (`WScript.Shell`):
+
+| | Server 2025 | Server 2022 | Windows 11 ARM |
+|---|---|---|---|
+| Desktop: same target | 7 of 7 | 7 of 8 | 6 of 7 |
+| Start menu: same target, or neither has one | 156 of 163 | 192 of 209 | 132 of 139 |
+| **Together** | **163 of 170 (95.9 %)** | **199 of 217 (91.7 %)** | **138 of 146 (94.5 %)** |
+| Same arguments / same working folder | 170 / 170 | 217 / 217 | 146 / 146 |
+
+The differences are of two kinds, both in the reader and both fixable: a
+target given only as a shell item list, which Windows resolves to a path
+and `lnk.py` does not decode (5, 16 and 8 shortcuts: the ID list's item
+format is not part of [MS-SHLLINK]), and a target taken from the
+environment block with the quotation marks it was stored with (2, 2 and
+0). Advertised shortcuts are agreed on as "no path" (Windows reports the
+installer's icon). What the first run showed without Windows' side:
 Start menu shortcuts (173, 219 and 145 on Server 2025, Server 2022 and
 ARM, all read without an error) come in four kinds: a path (108, 141, 93),
 a path with variables (`%windir%\system32\…`, from the environment block:
@@ -856,17 +976,24 @@ Server 2022, 9 of 9 on ARM (the Recycle Bin is named by its class
 identifier in the value and by a translated name on the screen; it is
 paired as the one shell item left over). That was Windows' default arrangement. Moving icons with
 `LVM_SETITEMPOSITION` changed the screen but not Explorer's record: after a
-refresh they were back. The second run drags an icon with the real
-pointer, as a person does, and decodes the result (NOT RUN). **Icon
-positions: readable from the disk for the default arrangement; a moved
-icon is NOT RUN.**
+refresh they were back. In run 43755897776 one icon was dragged with the
+real pointer, five cells right and three down: on Server 2025 it stayed
+there after a refresh, and the decoded value put it in column 6, row 3,
+the cell the desktop showed (9 of 9 icons in their cells); on Server 2022
+column 6, row 4, likewise (10 of 10). On ARM the drag did not reach the
+desktop (Windows' first-sign-in window lay over it) and nothing moved.
+**Icon positions: read from the disk, the default arrangement and a moved
+icon alike.**
 
 **Taskbar pins.** The shortcuts are files (two on Server 2025, three on Server 2022, none on
 ARM, which pins by policy) and read by `lnk.py`. Their order lies in
 `Taskband\Favorites`, a value nobody outside Microsoft documents; it names
 each pin's shortcut file in UTF-16, so the order is recovered by where the
 names lie (the first run's reader, which matched names by pattern, caught a
-stray character before each; corrected in the second run).
+stray character before each). In run 43755897776 every pinned file was
+named in the value: Server 2025 File Explorer, then Edge; Server 2022 Edge,
+File Explorer, Chrome. That order was not checked against the taskbar
+itself (NOT RUN).
 
 **Start pins.** Not readable from the disk: Windows 11 and Server 2025 keep
 them in `start2.bin`, an undocumented binary (2.4 KB and 22 KB here), and
@@ -880,16 +1007,24 @@ named fallback.
 
 **Wallpaper.** The test wallpaper's path, fit and file (by hash) were read
 on all three runners, and Windows' scaled copy (`TranscodedWallpaper`)
-exists beside it. One oddity: on Windows 11 the fit read back as 10
-("fill") although 6 ("fit") was written before setting the picture; the
-second run records the value right after setting it.
+exists beside it. One oddity: on Windows 11 the fit read 6 ("fit")
+right after the picture was set and 10 ("fill") a few minutes later, in
+both runs; something on Windows 11 rewrote it in between (not
+identified). The reader carries what the file says when it reads.
 
-**H5: holds for every listed item except Start pins**, which are found
-only in a form nobody outside Microsoft can read and are carried by the
-agent (the registered fallback). Not yet measured: the shortcut reader
-against Windows (the 90 % criterion) and a moved icon (both in the second
-run); the machine's registry files read by `regf.py`; volume labels read
-from the file system on Linux.
+**H5: holds.** Kill: the `.lnk` reader agrees with Windows on under 90 % of
+shortcut targets (measured: 91.7 to 95.9 %); or a listed item is found only
+in a form nobody outside Microsoft can read. One item is: **Start pins**
+(`start2.bin`, CloudStore), which are therefore carried by the agent at
+Windows' first start under TUR (`Export-StartLayout`), as registered.
+Everything else listed (wallpaper and fit, colours, desktop shortcuts with
+targets, icon positions, taskbar pins in order, known folders, drive
+letters, default applications, regional settings, keyboard layouts, time
+zone) was read from the files, and the registry files were shown to hold
+what the running Windows reports, value by value, by a reader that asks
+Windows nothing. Not measured: volume labels read from the file system on
+Linux (they are in each volume's own file system), and the taskbar order
+against the taskbar itself.
 
 ### 7.4 The carry-over manifest (for `dualrun` and the installer)
 
@@ -1163,17 +1298,20 @@ press once the image is public.
     it had gone into the artifact meant for open-source applications only;
     that artifact (`inwin-see-windows-11-arm` of run 43552339780) was
     deleted once its counts had been copied, because it held Microsoft's
-    text. The second run hides the window first and keeps a picture as an
-    open-source one only when the window pictured is the one on top.
+    text. Run 43755897776 hid the window's proxy, which did not remove it:
+    its pictures on ARM again show that window, but they went only to the
+    one-day folder, because each picture is now kept as an open-source one
+    only when the window pictured is the one on top.
 11. **Run 43552339780's rights were not recorded.** Its probe of the
     process token failed at every level (a buffer of the wrong size), so
     that run does not itself show which rights each level had; that the
-    lower levels were lower shows in what they were refused. The second run
-    records them.
+    lower levels were lower shows in what they were refused. Run
+    43755897776 records them; it also showed that `runas /trustlevel` keeps
+    high integrity (section 6.1).
 12. **Microsoft's applications were not counted by eye in run
     43552339780.** Their pictures were kept one day and had expired before
-    the run was read. The second run keeps them one day again; counting them
-    by eye is NOT RUN until someone reads that run within its day.
+    the run was read. Run 43755897776's were counted within their day
+    (section 3.1), on the x64 runners only.
 
 ## 11. Decisions for the owner
 
@@ -1223,8 +1361,8 @@ what TUR does unless the owner says otherwise; one stays the owner's).
 | # | Decision | Default proposed | Why (measured where marked) |
 |---|---|---|---|
 | 1 | The text above | Adopt it | H1 to H5 hold on real Windows (sections 3, 4, 6.1, 7) |
-| 2 | **Code-signing identity for Windows** | **Owner action, not defaulted.** Until then: the "get TUR" program and the agent are unsigned previews; TUR does not claim to operate elevated windows (section 3.3: NOT RUN) | A certificate binds a legal name to TUR and costs money every year; only the owner can choose the name |
-| 3 | What the Windows program may do after consent | The checker only reads, with no consent prompt, until the person agrees. After one consent prompt it does, through Windows' own tools, the steps the person was shown: Fast Startup off, Windows' own shrink, BitLocker suspended for one restart. Where anything is unusual (BitLocker on without the recovery key saved, a volume that needs checking, under 41 GiB free) it only explains and stops | The reading needs no rights for everything that decides (section 6.1); the doing is what Windows' tools do best themselves |
+| 2 | **Code-signing identity for Windows** | **Owner action, not defaulted.** Until then: the "get TUR" program and the agent are unsigned previews; P@x cannot see inside or operate a window the person started as administrator (section 3.3, measured) | A certificate binds a legal name to TUR and costs money every year; only the owner can choose the name |
+| 3 | What the Windows program may do after consent | The checker only reads, with no consent prompt, until the person agrees; on BitLocker it says "not known yet" rather than guess (section 6.1). After one consent prompt it does, through Windows' own tools, the steps the person was shown: Fast Startup off, Windows' own shrink, BitLocker suspended for one restart. Where anything is unusual (BitLocker on without the recovery key saved, a volume that needs checking, under 41 GiB free) it only explains and stops | The reading needs no rights for everything that decides (section 6.1); the doing is what Windows' tools do best themselves |
 | 4 | Staging without a USB stick | Not in the first version: a USB stick | It changes the EFI partition from Windows; it needs its own experiment |
 | 5 | A driver added to the person's Windows | None at first: messages on the serial port dualrun already uses, pixels on the private link; virtio serial offered later, as an option the person approves | dualrun section 4.2; section 5's sizes fit a serial line for messages, not for pixels |
 | 6 | What is carried over in the first version | Wallpaper and fit, background and accent colours, light or dark, desktop shortcuts and their grid positions, taskbar pins and their order, known folders, drive letters and labels, default applications (shown, applied only for file types that have a TUR or Windows-guest handler), regional settings, keyboard layouts, time zone. Start pins on Windows 11 by the agent at first start. Not carried: lock screen, sounds, cursors, theme files, Microsoft's own wallpapers as copies (shown in place from the Windows volume) | Every item in the first group was read from the files without Windows (section 7) |
