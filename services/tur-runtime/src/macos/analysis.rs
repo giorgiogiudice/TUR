@@ -28,7 +28,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::loadcmd::{LinkKind, LoadCommands, read_load_commands};
+use super::loadcmd::{LoadCommands, read_load_commands};
 use crate::arch::Arch;
 use crate::bundle::AppBundleInfo;
 use crate::codes::Code;
@@ -646,6 +646,7 @@ fn analyse_bundle_info(
 
 #[cfg(test)]
 mod tests {
+    use super::super::loadcmd::LinkKind;
     use super::super::loadcmd::tests::{Command, image, universal};
     use super::*;
     use crate::testdata::TempDir;

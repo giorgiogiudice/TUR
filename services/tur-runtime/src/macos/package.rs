@@ -254,7 +254,7 @@ pub fn choose<'a>(found: &'a Search, wanted: Option<&str>) -> Result<&'a FoundBu
             })
             .collect();
         return match matching.as_slice() {
-            [one] => Ok(one),
+            [one] => Ok(*one),
             [] => Err(format!(
                 "no application named {wanted:?} was found; found: {}",
                 list(&names)
