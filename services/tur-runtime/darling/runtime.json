@@ -1,0 +1,21 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. TUR's builds of Darling, compiled into tur-runtime (src/macos/darling.rs). Each is built from source by .github/workflows/darling-runtime.yml (scripts/darling/build-darling.sh, at the commit in scripts/darling/darling.lock with third-party/darling/patches applied, on the image's pinned base) and published to the repository's own package registry only when the lead dispatches it with publish set. sha256 and size stay null until the build is published; they are then copied here from the workflow's summary, and tur-runtime fetches nothing whose size and SHA-256 do not match. The id and tag name Darling's commit, the patch queue's SHA-256 and the Fedora release of the base.",
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "id": "darling-3fcd2e1aa850-qc89ea8ce-fc45-x86_64",
+      "architecture": "x86_64",
+      "fedora_release": "45",
+      "base_digest": "sha256:cbc9be8afaf179b2e9e7ce71412a01fd4264c711925e10e75017553ff124af31",
+      "darling_commit": "3fcd2e1aa85079789d19d82415695bdecc512241",
+      "queue_sha256": "c89ea8ce6d00b96e9748e854033a5c684cfade912723fe961ee779b343488537",
+      "repository": "ghcr.io/giorgiogiudice/tur-darling-runtime",
+      "tag": "3fcd2e1aa850-qc89ea8ce-fc45-x86_64",
+      "sha256": null,
+      "size": null,
+      "unpacked_size": null,
+      "install_prefix": "/opt/tur-darling",
+      "licence": "GPL-3.0-or-later AND MIT AND LGPL-2.1-or-later AND APSL-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Apache-2.0"
+    }
+  ]
+}

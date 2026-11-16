@@ -28,6 +28,11 @@ what made it pass. It has a design note of its own,
 [compat-autopilot](compat-autopilot.md); see also
 [The compatibility autopilot](#the-compatibility-autopilot) below.
 
+The fifth installs and runs macOS applications in Darling, one prefix per
+application in the same sandbox, with TUR's own build of Darling fetched when
+it is first needed. It is described in
+[Running a macOS application](#running-a-macos-application).
+
 A recommendation names a route. It is never a statement that a particular
 application works: that needs a recorded test (§2.3). The same holds for
 launching and installing: an application that installs and opens a window has
@@ -231,6 +236,7 @@ families they belong to, and the Windows end-to-end test
 | `TUR-RUNTIME-PROFILE-002` | The profile is not JSON or does not match the schema |
 | `TUR-RUNTIME-PROFILE-003` | A profile field holds a value that is not allowed |
 | `TUR-RUNTIME-PROFILE-004` | The profile appears to hold a credential |
+| `TUR-RUNTIME-MACOS-001` to `-020` | The macOS route through Darling: see [its codes](#codes-of-the-macos-route) |
 
 The application codes have the topic `APP` in the `WINDOWS` family, not
 `INSTALL`: `TUR-INSTALL-*` is the family of the operating system's own
@@ -1212,6 +1218,165 @@ Ubuntu Azure kernel flavour, except as the job printed it
 case-only renames on a case-folded directory (bugs.winehq.org and
 gitlab.winehq.org refuse automated reading).
 
+## Running a macOS application
+
+The fifth slice: macOS applications in [Darling](https://github.com/darlinghq/darling),
+TUR's experimental macOS layer for AppKit applications (AGENTS.md, priority 8).
+Code: `services/tur-runtime/src/macos/`, `src/mac_cli.rs`. Darling's build:
+`scripts/darling/`, `third-party/darling/`. Facts, decisions and what has not
+run: [macos-darling-1](../reports/macos-darling-1.md).
+
+### Where Darling comes from
+
+Darling is not in the image. TUR's CI builds it from source at a pinned commit
+with TUR's patch queue, on the image's own pinned base so that it links against
+the image's libraries, and publishes it as one archive to the repository's
+package registry (workflow `darling-runtime`, dispatched by the lead). The
+manifest compiled into `tur-runtime` (`services/tur-runtime/darling/runtime.json`)
+names the archive by its SHA-256 and size. The person's computer fetches it
+when it first installs a macOS application: `curl` asks the registry for an
+anonymous pull token (written to a file of mode 0600, never on a command line),
+downloads the blob by its digest, `tur-runtime` checks size and SHA-256, and
+only then is it unpacked:
+
+```
+$XDG_DATA_HOME/tur/runtime/darling/<build>/tree/opt/tur-darling/   the build, never written again
+$XDG_DATA_HOME/tur/runtime/darling/<build>/verified.json           written last
+```
+
+`mac runtime fetch --from-file FILE --sha256 HEX` imports an archive instead;
+for a build the manifest does not yet name as published, the digest must be
+given. Removing the build (`mac runtime remove`) keeps installed applications,
+which need it fetched again to start. The build leaves out the Swift runtime,
+headers, SDK files and the applications Darling puts in the guest's
+`/Applications`, and is refused if anything Apple-signed is left
+(`third-party/darling/README.md`).
+
+### The sandbox and Darling's mode
+
+Darling runs in the sandbox every runtime gets ([The sandbox](#the-sandbox)),
+with two additions: the build, read-only, at `/opt/tur-darling` (the path it was
+built for), and the prefix a second time at `/run/tur-runtime/prefix`, because
+Darling makes Unix sockets inside its prefix and a socket's path holds at most
+107 bytes. Darling's view of "the host's root", `/Volumes/SystemRoot`, is
+therefore the sandbox and not the computer.
+
+Darling's launcher is installed set-user-ID root by Darling's own packages. Here
+it is not: an unprivileged launcher takes its mode from the environment
+(Darling's `launcher-mode.c`, read 16 November 2026):
+
+| Mode | What Darling does | In TUR's sandbox |
+|---|---|---|
+| `nonroot` (`DARLING_NONROOT=1`), the default | No namespaces of its own; the prefix is a copy of Darling's system; the guest's `/proc` is the sandbox's | Fits as it is: nested user namespaces stay forbidden (`--disable-userns`) |
+| `rootless` (`DARLING_ROOTLESS=1`) | A user, mount and PID namespace of its own; the prefix is an overlay on Darling's system; `/proc` mounted for its PID namespace | Needs nested user namespaces. Mounting `/proc` there is expected to be refused by the kernel under bubblewrap, whose `/proc` has read-only mounts over parts of it; offered so that it can be measured |
+
+The cost of `nonroot` is disk space: every application's prefix holds a copy of
+Darling's system (its size is in the build's record; not measured yet).
+Darling's copy skips a file whose modification time equals the original's, so a
+copy-on-write seed of an initialised prefix could make it nearly free on Btrfs;
+that is not built.
+
+### Installing
+
+`tur-runtime mac install <package>`. The package is identified by its content
+(`macos::package`):
+
+| Package | Recognised by | Put into the prefix by |
+|---|---|---|
+| Application bundle (`.app`) | A directory with `Contents/Info.plist` or `Contents/MacOS` | `cp --archive --no-dereference --reflink=auto` in the sandbox, the bundle shown read-only |
+| Disk image (`.dmg`) | The UDIF trailer `koly`; or an HFS+ or APFS signature (raw image) | 7-Zip (Fedora's `7zip`, 26.03 in Fedora 45: DMG, HFS+, APFS, zlib, bzip2, LZFSE, LZMA) unpacks it in the sandbox into the prefix's `unpacked/`; a partition image it leaves is unpacked in turn; then as a bundle |
+| Zip archive | `PK` | As a disk image |
+| Installer package (`.pkg`) | The xar signature `xar!` | Darling's own `installer -pkg ... -target /`, inside Darling and the sandbox: a package may carry scripts only a macOS-like system runs |
+
+Nothing is mounted: no FUSE, no loop device, no root. Then, in order: the
+bundle is chosen (the only one, or `--app NAME`); its main program is analysed
+(below) and a refusal stops the installation before Darling starts; the Darling
+prefix is created (`darling shell /usr/bin/true`); the bundle is copied into
+`/Applications` and the programs in its `Contents/MacOS` directories made
+executable; the unpacked package is deleted; the launcher entry
+`launchers/<app-id>/tur-darling-<app-id>.desktop` (`Exec=tur-runtime mac launch
+<app-id>`) is staged; and the record `prefixes/<app-id>/mac-application.json`
+(`schemas/mac-app-record.schema.json`) is written last. A failure rolls
+everything back but the operations log, unless `--keep-failed`.
+
+### What the program's analysis refuses
+
+`macos::analysis` reads the Mach-O file's architectures and the load commands of
+the image Darling would run. Nothing is executed.
+
+| Finding | Severity | Code |
+|---|---|---|
+| Built only for Apple silicon (arm64) on an x86-64 computer | Refused, with the reason: nothing translates arm64 code there | `TUR-RUNTIME-MACOS-002` |
+| No program for this processor (32-bit Intel, PowerPC), or not a program | Refused | `-003` |
+| Links SwiftUI | Refused (weakly linked: a warning) | `-004` |
+| Links macOS's Swift runtime (`/usr/lib/swift/libswift*`) | Refused: TUR's build does not ship Apple's Swift runtime, and Swift applications from current Xcode do not run in Darling (darlinghq/darling#2059) | `-005` |
+| Swift code with its own copy of the runtime (from before macOS had one) | Refused unless `--allow-swift` | `-005` |
+| Encrypted (Mac App Store) | Refused | `-006` |
+| Built for iOS or another platform | Refused | `-017` |
+| An iPad application for the Mac (Mac Catalyst) | Refused unless allowed | `-017` |
+| Apple's private frameworks | Warning | |
+| A macOS kernel extension | Refused | `TUR-DARWIN-RUNTIME-002` |
+
+A program that passes is "runnable": nothing known stands in the way. That is
+never a statement that it works.
+
+### Launching and removing
+
+`mac launch <app-id>` starts the application through Darling's shell with its
+macOS path (`/Applications/<bundle>/Contents/MacOS/<program>`), so that its
+bundle is where macOS would have it, with the build the application was
+installed with. The environment is built as for Wine, plus `DPREFIX` and the
+mode variable; a launch may not set `DPREFIX`, `DARLING_*` (except
+`DARLING_APPKIT_BACKEND`) or `LD_*`. One log per launch, as for Wine.
+
+`mac uninstall <app-id>` deletes the application's directory (Darling prefix,
+private home, record), staging, launcher entry and logs, and checks that each is
+gone (`-015` otherwise). Only a directory with a macOS record is removed.
+
+### The route order
+
+For a macOS package the order is: the application's native Linux edition; then
+re-hosting its payload when it is portable (the re-hosting component's verdict,
+docs/reports/exp-rehost-1.md); then Darling, only when the catalogue records
+the application as measured to work in it (a `darling` record rated `good` or
+`usable`) and the analysis refuses nothing; otherwise no route, with every
+reason (`-020`). `macos::route::decide` is this order for a file the person has
+(`mac route`); the catalogue router applies the same rule to a macOS edition
+([catalogue-and-routing](catalogue-and-routing.md#decision-table)).
+
+### Assistant tools
+
+P@x can identify a macOS package (`runtime_mac_identify`), list the installed
+macOS applications (`runtime_mac_list`) and ask whether Darling is here
+(`runtime_mac_status`), all class 0. Installing and removing are declared as
+class 2 (`runtime_mac_install`, `runtime_mac_uninstall`) and not offered: no
+adapter performs them until a person can confirm them on the trusted path.
+
+### Codes of the macOS route
+
+| Code | Condition |
+|---|---|
+| `TUR-RUNTIME-MACOS-001` | Not a macOS application, disk image, installer package or archive (also a bare program) |
+| `TUR-RUNTIME-MACOS-002` | Built only for Apple silicon |
+| `TUR-RUNTIME-MACOS-003` | No program Darling runs on this processor |
+| `TUR-RUNTIME-MACOS-004` | Uses SwiftUI |
+| `TUR-RUNTIME-MACOS-005` | A Swift application Darling does not run |
+| `TUR-RUNTIME-MACOS-006` | Encrypted by the Mac App Store |
+| `TUR-RUNTIME-MACOS-007` | TUR's Darling is not on this computer |
+| `TUR-RUNTIME-MACOS-008` | No Darling build is published for this computer |
+| `TUR-RUNTIME-MACOS-009` | A fetched or imported build does not match its SHA-256 and size |
+| `TUR-RUNTIME-MACOS-010` | A program the route needs (7-Zip, curl, tar, cp, find) is not installed |
+| `TUR-RUNTIME-MACOS-011` | No single application in the package |
+| `TUR-RUNTIME-MACOS-012` | No macOS application with this identifier |
+| `TUR-RUNTIME-MACOS-013` | The record is unreadable, not valid or another application's |
+| `TUR-RUNTIME-MACOS-014` | A step of the installation failed; rolled back |
+| `TUR-RUNTIME-MACOS-015` | Something was left after the removal |
+| `TUR-RUNTIME-MACOS-016` | The application is already installed |
+| `TUR-RUNTIME-MACOS-017` | Built for another Apple platform |
+| `TUR-RUNTIME-MACOS-018` | A value given to a macOS command is not allowed |
+| `TUR-RUNTIME-MACOS-019` | The build was made for another Fedora release than this system (`--any-system` overrides) |
+| `TUR-RUNTIME-MACOS-020` | No route runs the package |
+
 ## Verified upstream
 
 Read on 12 November 2026. Where a primary source could not be read, that is
@@ -1314,6 +1479,19 @@ tur-runtime app autopilot [<app-id>] --plan [--failure CLASS]
 tur-runtime app autopilot <app-id> --results
 tur-runtime app autopilot --apply <result-id>
 tur-runtime app autopilot <app-id> --revert
+
+tur-runtime mac identify <path> [--json] [--host-arch ARCH] [--allow-swift]
+tur-runtime mac route <path> [--linux-edition] [--rehost VERDICT] [--darling-measured] [--json]
+tur-runtime mac runtime status [--json]
+tur-runtime mac runtime fetch [--from-file FILE --sha256 HEX]
+tur-runtime mac runtime remove
+tur-runtime mac install <package> [--app-id ID] [--name NAME] [--app BUNDLE] [--allow-swift]
+        [--no-network] [--darling-mode nonroot|rootless] [--timeout SECONDS] [--no-fetch]
+        [--keep-failed] [--launcher PROGRAM]
+tur-runtime mac list [--json]
+tur-runtime mac show <app-id> [--json]
+tur-runtime mac launch <app-id> [--env NAME=VALUE]... [-- arguments for the application]
+tur-runtime mac uninstall <app-id>
 ```
 
 Every `prefix` and `launch` command, and `app install`, `app launch` and
@@ -1430,8 +1608,10 @@ the Windows-guest route. Everything else is in
   64-bit; no 32-bit application has been started. The launch-path job still
   runs without Wine's 32-bit half.
 - **A portal-like grant flow.** Grants are made on the command line.
-- **Darling.** No environment is created; the macOS route is still
-  recommendation only.
+- **Darling, beyond the plan.** The macOS route is built and unit-tested
+  ([Running a macOS application](#running-a-macos-application)); nothing of
+  it has run: no Darling build, no installation, no window. `inspect` still
+  looks for a `darling` program in `PATH` and does not know TUR's own build.
 - **Application database.** No known-application lookup, so the recommendation
   uses the file's format and architecture and the host's runtimes only. User
   preferences and security policy (§7.4) are not inputs yet. Proton is never

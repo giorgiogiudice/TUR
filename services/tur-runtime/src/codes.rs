@@ -3,7 +3,8 @@
 //! The stable error codes this component reports (specification §29.3).
 //!
 //! Conditions that are not specific to one ecosystem use the runtime
-//! manager's own family, `RUNTIME`, with a `MANAGER` or `PROFILE` topic.
+//! manager's own family, `RUNTIME`, with a `MANAGER` or `PROFILE` topic. The
+//! macOS route through Darling has its own topic there, `MACOS`.
 //! Conditions specific to Windows, macOS or Android software use the
 //! `WINDOWS`, `DARWIN` and `ANDROID` families, and refusals made to keep an
 //! application inside its sandbox use `SECURITY`.
@@ -151,11 +152,51 @@ pub enum Code {
     AutopilotAlreadyApplied,
     /// No remedies are applied to the application, so there is nothing to undo.
     AutopilotNotApplied,
+    /// The file is not a macOS application, disk image, installer package or archive that holds one.
+    MacosNotMacSoftware,
+    /// The application is built only for Apple silicon (arm64); Darling on an x86-64 PC runs x86-64 programs only.
+    MacosArm64Only,
+    /// The application has no program for this processor that Darling runs (32-bit Intel, PowerPC, or not a program).
+    MacosNoRunnableSlice,
+    /// The application uses SwiftUI, which Darling does not implement.
+    MacosSwiftUi,
+    /// The application is written in Swift; Swift applications from current Xcode do not run in Darling. Refused unless the person allows it.
+    MacosSwift,
+    /// The program is encrypted (Mac App Store copy protection), which only macOS can decrypt.
+    MacosEncrypted,
+    /// TUR's build of Darling has not been fetched to this computer.
+    MacosRuntimeNotInstalled,
+    /// TUR has published no build of Darling for this processor and system.
+    MacosRuntimeNotPublished,
+    /// A fetched or imported Darling build does not have the size and SHA-256 its manifest names.
+    MacosRuntimeDigest,
+    /// A program the macOS route needs (7-Zip, curl, tar, cp) is not installed.
+    MacosToolMissing,
+    /// The package holds no application bundle, or several and none was chosen.
+    MacosNoApplicationFound,
+    /// No macOS application with this identifier is installed.
+    MacosAppNotInstalled,
+    /// The record of an installed macOS application is unreadable, not valid, or another application's.
+    MacosRecordInvalid,
+    /// A step of installing a macOS application failed; the installation was rolled back.
+    MacosInstallFailed,
+    /// Something of a macOS application was still there after it was removed.
+    MacosUninstallIncomplete,
+    /// The application already has a directory; nothing is installed over it.
+    MacosAppExists,
+    /// The program is built for another Apple platform (an iPhone or iPad application, or an iPad application for the Mac), not for macOS.
+    MacosForeignPlatform,
+    /// A value given to a macOS command is not allowed.
+    MacosRequestInvalid,
+    /// The Darling build was made for another system release than this one.
+    MacosRuntimeIncompatible,
+    /// No route runs the macOS package: no Linux edition, no re-hostable payload, and Darling is not measured to run it.
+    MacosNoRoute,
 }
 
 impl Code {
     /// Every code this component can report.
-    pub const ALL: [Code; 64] = [
+    pub const ALL: [Code; 84] = [
         Code::Unreadable,
         Code::Damaged,
         Code::LimitExceeded,
@@ -220,6 +261,26 @@ impl Code {
         Code::AutopilotUnavailable,
         Code::AutopilotAlreadyApplied,
         Code::AutopilotNotApplied,
+        Code::MacosNotMacSoftware,
+        Code::MacosArm64Only,
+        Code::MacosNoRunnableSlice,
+        Code::MacosSwiftUi,
+        Code::MacosSwift,
+        Code::MacosEncrypted,
+        Code::MacosRuntimeNotInstalled,
+        Code::MacosRuntimeNotPublished,
+        Code::MacosRuntimeDigest,
+        Code::MacosToolMissing,
+        Code::MacosNoApplicationFound,
+        Code::MacosAppNotInstalled,
+        Code::MacosRecordInvalid,
+        Code::MacosInstallFailed,
+        Code::MacosUninstallIncomplete,
+        Code::MacosAppExists,
+        Code::MacosForeignPlatform,
+        Code::MacosRequestInvalid,
+        Code::MacosRuntimeIncompatible,
+        Code::MacosNoRoute,
     ];
 
     /// The code as text, for example `TUR-WINDOWS-RUNTIME-001`.
@@ -289,6 +350,26 @@ impl Code {
             Code::AutopilotUnavailable => "TUR-WINDOWS-AUTOPILOT-007",
             Code::AutopilotAlreadyApplied => "TUR-WINDOWS-AUTOPILOT-008",
             Code::AutopilotNotApplied => "TUR-WINDOWS-AUTOPILOT-009",
+            Code::MacosNotMacSoftware => "TUR-RUNTIME-MACOS-001",
+            Code::MacosArm64Only => "TUR-RUNTIME-MACOS-002",
+            Code::MacosNoRunnableSlice => "TUR-RUNTIME-MACOS-003",
+            Code::MacosSwiftUi => "TUR-RUNTIME-MACOS-004",
+            Code::MacosSwift => "TUR-RUNTIME-MACOS-005",
+            Code::MacosEncrypted => "TUR-RUNTIME-MACOS-006",
+            Code::MacosRuntimeNotInstalled => "TUR-RUNTIME-MACOS-007",
+            Code::MacosRuntimeNotPublished => "TUR-RUNTIME-MACOS-008",
+            Code::MacosRuntimeDigest => "TUR-RUNTIME-MACOS-009",
+            Code::MacosToolMissing => "TUR-RUNTIME-MACOS-010",
+            Code::MacosNoApplicationFound => "TUR-RUNTIME-MACOS-011",
+            Code::MacosAppNotInstalled => "TUR-RUNTIME-MACOS-012",
+            Code::MacosRecordInvalid => "TUR-RUNTIME-MACOS-013",
+            Code::MacosInstallFailed => "TUR-RUNTIME-MACOS-014",
+            Code::MacosUninstallIncomplete => "TUR-RUNTIME-MACOS-015",
+            Code::MacosAppExists => "TUR-RUNTIME-MACOS-016",
+            Code::MacosForeignPlatform => "TUR-RUNTIME-MACOS-017",
+            Code::MacosRequestInvalid => "TUR-RUNTIME-MACOS-018",
+            Code::MacosRuntimeIncompatible => "TUR-RUNTIME-MACOS-019",
+            Code::MacosNoRoute => "TUR-RUNTIME-MACOS-020",
         }
     }
 
@@ -363,6 +444,32 @@ impl Code {
             Code::AutopilotUnavailable => "The autopilot cannot run for this application here",
             Code::AutopilotAlreadyApplied => "Remedies are already applied to this application",
             Code::AutopilotNotApplied => "No remedies are applied to this application",
+            Code::MacosNotMacSoftware => "The file is not a macOS application or package",
+            Code::MacosArm64Only => "The application is built only for Apple silicon",
+            Code::MacosNoRunnableSlice => {
+                "The application has no program Darling can run on this processor"
+            }
+            Code::MacosSwiftUi => "The application uses SwiftUI, which Darling does not have",
+            Code::MacosSwift => {
+                "The application is a Swift application, which Darling does not run yet"
+            }
+            Code::MacosEncrypted => "The program is encrypted by the Mac App Store",
+            Code::MacosRuntimeNotInstalled => "Darling is not installed on this computer",
+            Code::MacosRuntimeNotPublished => "No build of Darling is published for this computer",
+            Code::MacosRuntimeDigest => "The Darling build does not match its digest",
+            Code::MacosToolMissing => "A program the macOS route needs is not installed",
+            Code::MacosNoApplicationFound => "No single application was found in the package",
+            Code::MacosAppNotInstalled => "The macOS application is not installed",
+            Code::MacosRecordInvalid => "The macOS application record is unreadable or not valid",
+            Code::MacosInstallFailed => "Installing the macOS application failed",
+            Code::MacosUninstallIncomplete => "Something was left behind by the removal",
+            Code::MacosAppExists => "The application is already installed",
+            Code::MacosForeignPlatform => "The program is not a macOS program",
+            Code::MacosRequestInvalid => "A value given for the macOS application is not allowed",
+            Code::MacosRuntimeIncompatible => {
+                "The Darling build was made for another system release"
+            }
+            Code::MacosNoRoute => "No route runs this macOS application",
         }
     }
 
@@ -469,7 +576,8 @@ mod tests {
     #[test]
     fn no_code_is_parked_under_the_desktop_family() {
         // The ten conditions that are the runtime manager's own are in its
-        // family, under two topics, with the numbers they always had.
+        // family, under two topics, with the numbers they always had; the
+        // macOS route's are beside them, under a third.
         let own: Vec<&str> = Code::ALL
             .iter()
             .filter(|code| code.error_code().family() == Family::Runtime)
@@ -480,6 +588,26 @@ mod tests {
         assert_eq!(
             sorted,
             [
+                "TUR-RUNTIME-MACOS-001",
+                "TUR-RUNTIME-MACOS-002",
+                "TUR-RUNTIME-MACOS-003",
+                "TUR-RUNTIME-MACOS-004",
+                "TUR-RUNTIME-MACOS-005",
+                "TUR-RUNTIME-MACOS-006",
+                "TUR-RUNTIME-MACOS-007",
+                "TUR-RUNTIME-MACOS-008",
+                "TUR-RUNTIME-MACOS-009",
+                "TUR-RUNTIME-MACOS-010",
+                "TUR-RUNTIME-MACOS-011",
+                "TUR-RUNTIME-MACOS-012",
+                "TUR-RUNTIME-MACOS-013",
+                "TUR-RUNTIME-MACOS-014",
+                "TUR-RUNTIME-MACOS-015",
+                "TUR-RUNTIME-MACOS-016",
+                "TUR-RUNTIME-MACOS-017",
+                "TUR-RUNTIME-MACOS-018",
+                "TUR-RUNTIME-MACOS-019",
+                "TUR-RUNTIME-MACOS-020",
                 "TUR-RUNTIME-MANAGER-001",
                 "TUR-RUNTIME-MANAGER-002",
                 "TUR-RUNTIME-MANAGER-003",
@@ -518,6 +646,25 @@ mod tests {
         assert_eq!(Code::RunningAsRoot.as_str(), "TUR-SECURITY-SANDBOX-001");
         assert_eq!(Code::PrefixPinned.as_str(), "TUR-WINDOWS-PREFIX-007");
         assert_eq!(Code::RuntimePinMismatch.as_str(), "TUR-WINDOWS-RUNTIME-005");
+    }
+
+    #[test]
+    fn the_macos_route_codes_are_numbered_in_order() {
+        // The macOS route through Darling (docs/architecture/runtime-manager.md,
+        // "Running a macOS application"): one topic in the runtime manager's
+        // own family, numbered without gaps.
+        let macos: Vec<&str> = Code::ALL
+            .iter()
+            .map(|code| code.as_str())
+            .filter(|code| code.starts_with("TUR-RUNTIME-MACOS-"))
+            .collect();
+        let expected: Vec<String> = (1..=20)
+            .map(|number| format!("TUR-RUNTIME-MACOS-{number:03}"))
+            .collect();
+        assert_eq!(macos, expected);
+        assert_eq!(Code::MacosSwiftUi.error_code().family(), Family::Runtime);
+        // The older macOS conditions of inspection did not move.
+        assert_eq!(Code::DarlingMissing.as_str(), "TUR-DARWIN-RUNTIME-001");
     }
 
     #[test]

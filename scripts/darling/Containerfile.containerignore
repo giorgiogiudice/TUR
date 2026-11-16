@@ -1,0 +1,7 @@
+# What is sent to the build of scripts/darling/Containerfile. podman and
+# buildah prefer <Containerfile>.containerignore over the .containerignore at
+# the root of the build context: the build scripts and TUR's patch queue,
+# nothing else.
+*
+!scripts/darling/
+!third-party/darling/

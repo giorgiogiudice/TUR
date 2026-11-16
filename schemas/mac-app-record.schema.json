@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/mac-app-record.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR macOS application record",
+  "description": "What tur-runtime records about one macOS application installed into a Darling prefix of its own (docs/architecture/runtime-manager.md, \"Running a macOS application\"): what it is, which file it came from, which Darling build it was installed with and in which mode, which program its launcher entry starts, and what the analysis of the program found. Written by tur-runtime only, as mac-application.json beside the application's prefix; never visible to the application; never holds a secret. A unit test (services/tur-runtime/src/macos/record.rs) keeps this schema and the Rust type in step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "app_id", "name", "version", "bundle_identifier", "bundle", "executable",
+    "slice", "runtime", "darling", "network", "allowed_swift", "installed_at", "source", "method",
+    "findings", "launcher"
+  ],
+  "$defs": {
+    "text": {
+      "description": "Free text without control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "darling": {
+      "description": "The Darling build the application was installed with (services/tur-runtime/darling/runtime.json).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "commit", "mode"],
+      "properties": {
+        "artifact": { "type": "string", "pattern": "^[a-z0-9._-]{1,128}$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "mode": {
+          "description": "nonroot: no namespaces of Darling's own, the prefix a copy of Darling's system (the default, which fits tur-runtime's sandbox); rootless: Darling's own user, mount and PID namespaces.",
+          "enum": ["nonroot", "rootless"]
+        }
+      }
+    },
+    "source": {
+      "description": "The file or bundle the application came from. Where it was downloaded is not recorded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "size", "sha256"],
+      "properties": {
+        "kind": { "enum": ["app-bundle", "disk-image", "installer-package", "zip-archive"] },
+        "name": { "$ref": "#/$defs/text" },
+        "size": { "type": "integer", "minimum": 0 },
+        "sha256": {
+          "description": "Absent (null) for a bundle directory.",
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "severity", "code"],
+      "properties": {
+        "reason": { "type": "string", "pattern": "^[a-z0-9-]{1,64}$" },
+        "severity": { "enum": ["refusal", "refused-unless-allowed", "warning", "note"] },
+        "code": {
+          "oneOf": [
+            { "type": "string", "pattern": "^TUR-[A-Z0-9]+(-[A-Z0-9]+)*-[0-9]{3}$" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "launcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["desktop_entry", "installed"],
+      "properties": {
+        "desktop_entry": { "type": "string", "pattern": "^/[^\\u0000-\\u001f\\u007f-\\u009f]*$" },
+        "installed": {
+          "description": "Whether the entry was put where the desktop looks. Always false: that is the desktop bridge's work.",
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "app_id": {
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$" },
+    "version": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+    "bundle_identifier": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+    "bundle": {
+      "description": "The bundle's directory name in the prefix's /Applications: one path component ending in .app.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[^/\\u0000-\\u001f\\u007f-\\u009f]+\\.app$"
+    },
+    "executable": {
+      "description": "The main program, relative to the bundle.",
+      "type": "string",
+      "pattern": "^Contents/MacOS/[^/\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "slice": { "enum": ["x86_64", "aarch64", "i386"] },
+    "runtime": { "const": "darling" },
+    "darling": { "$ref": "#/$defs/darling" },
+    "network": { "type": "boolean" },
+    "allowed_swift": { "type": "boolean" },
+    "installed_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "method": { "enum": ["copied-bundle", "unpacked", "installer-package"] },
+    "findings": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/finding" } },
+    "launcher": { "$ref": "#/$defs/launcher" }
+  }
+}

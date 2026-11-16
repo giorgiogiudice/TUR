@@ -15,6 +15,10 @@
 //! tur-runtime app uninstall <app-id>             remove it, and everything kept for it
 //! tur-runtime app autopilot <app-id>             try remedies in throwaway copies of its prefix
 //! tur-runtime app autopilot --apply <result-id>   apply what a result found, after a backup
+//! tur-runtime mac identify <path>                say what a macOS package is, and whether Darling can start it
+//! tur-runtime mac install <package> ...          install a macOS application into a Darling prefix of its own
+//! tur-runtime mac list | show | launch | uninstall   the installed macOS applications
+//! tur-runtime mac runtime status | fetch | remove    TUR's build of Darling on this computer
 //! ```
 //!
 //! `inspect`, `profile validate`, `desktop-entry`, `installer identify`,
@@ -39,6 +43,8 @@
 //!
 //! `launch` exits with the application's own exit status once the application
 //! has run. With `--json` the report says which it was.
+
+mod mac_cli;
 
 use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};
@@ -196,6 +202,12 @@ enum Command {
     App {
         #[command(subcommand)]
         command: AppCommand,
+    },
+    /// macOS applications in Darling: identify, route, install, list, start
+    /// and remove them; TUR's build of Darling on this computer.
+    Mac {
+        #[command(subcommand)]
+        command: mac_cli::MacCommand,
     },
     /// Internal: run a program inside the sandbox and wait for the Wine
     /// server before exiting.
@@ -590,6 +602,7 @@ fn main() -> ExitCode {
             command: InstallerCommand::Identify { file, json },
         } => run_installer_identify(&file, json),
         Command::App { command } => run_app(command),
+        Command::Mac { command } => mac_cli::run(command),
         Command::Supervise { settle, command } => run_supervise(settle.as_deref(), &command),
     };
     ExitCode::from(status)

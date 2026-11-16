@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# TUR's patch queue to Darling, applied in this order to the commit pinned in
+# scripts/darling/darling.lock by scripts/darling/build-darling.sh.
+# <submodule path, or . for the main repository> <patch file in this directory>
+# Empty: TUR's first build is Darling as upstream has it at the pinned commit.

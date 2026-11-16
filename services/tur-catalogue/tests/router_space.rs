@@ -844,6 +844,20 @@ fn macos_edition_space() {
                                         .iter()
                                         .any(|caveat| caveat.severity == Severity::Blocker)
                             );
+                            // Offered only for an application measured to
+                            // work in Darling; blocked otherwise.
+                            let measured = rating == Some(Rating::Good);
+                            assert_eq!(
+                                darling.caveats.iter().any(|caveat| caveat.text_id
+                                    == "experimental.darling-not-measured"
+                                    && caveat.severity == Severity::Blocker),
+                                !measured,
+                                "{}",
+                                case.describe()
+                            );
+                            if !measured {
+                                assert_eq!(darling.outlook, Outlook::Blocked, "{}", case.describe());
+                            }
                         } else {
                             assert_eq!(options.len(), 1);
                             assert_eq!(options[0].route, Route::NoRoute);

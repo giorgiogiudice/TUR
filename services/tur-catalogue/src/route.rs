@@ -23,7 +23,7 @@
 //! | 4 | Windows guest, directly after its compatibility layer | Not a game; and the layer is rated poor or broken, or is unrated with a known obstacle, or the user asks; and virtual machines are not forbidden |
 //! | 5 | Android runtime | An Android edition exists |
 //! | 6 | Web application, not primary | No better route is free of known obstacles, or the user pinned it |
-//! | 7 | Darling | A macOS edition exists and the user has enabled Darling |
+//! | 7 | Darling | A macOS edition exists and the user has enabled Darling; blocked unless a record says the application works in it |
 //!
 //! A Linux edition whose record says it is clearly worse than another route
 //! is listed after that route. Routes that cannot work on this machine are
@@ -156,7 +156,7 @@ pub struct Caveat {
 /// An identifier names one English sentence, with its parameters left open.
 /// The identifiers are stable: a sentence may be reworded, and its
 /// identifier stays; a sentence that says something else gets a new one.
-pub const CAVEAT_TEXT_IDS: [&str; 46] = [
+pub const CAVEAT_TEXT_IDS: [&str; 47] = [
     "requirement.kernel-anti-cheat.proton",
     "requirement.kernel-anti-cheat.wine",
     "requirement.kernel-anti-cheat.windows-guest",
@@ -193,6 +193,7 @@ pub const CAVEAT_TEXT_IDS: [&str; 46] = [
     "closed-store.not-integrated",
     "community-package",
     "experimental.darling",
+    "experimental.darling-not-measured",
     "guest-memory.too-little",
     "guest-memory.enough",
     "guest-memory.unknown",
@@ -998,6 +999,22 @@ fn evaluate(
             Params::new(),
             "Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications.",
         ));
+        // Darling is offered only for an application measured to work in
+        // it: a record rated good or usable for this route
+        // (docs/reports/macos-darling-1.md). Without one it is listed,
+        // blocked, with the reason. With one it stays doubtful: it is
+        // experimental whatever the record says.
+        if rating.is_supporting() {
+            firm_obstacle = true;
+        } else {
+            caveats.push(caveat(
+                CaveatCode::Experimental,
+                Severity::Blocker,
+                "experimental.darling-not-measured",
+                Params::new(),
+                "TUR offers Darling only for applications measured to work in it, and no test or report says this one does.",
+            ));
+        }
     }
 
     if route == Route::WindowsGuest {
@@ -2312,8 +2329,29 @@ mod tests {
             AlternativeKind::Mac
         );
 
-        // Enabled: offered, labelled experimental, doubtful.
+        // Enabled, and nothing says the application works in Darling:
+        // listed, blocked, with the reason; no route.
         let options = run(&entry, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::NoRoute, Route::Darling]);
+        assert_eq!(options[1].outlook, Outlook::Blocked);
+        assert!(
+            options[1]
+                .caveats
+                .iter()
+                .any(|caveat| caveat.text_id == "experimental.darling-not-measured"
+                    && caveat.severity == Severity::Blocker)
+        );
+        assert_eq!(
+            options[0].alternative.as_ref().unwrap().kind,
+            AlternativeKind::Mac
+        );
+
+        // Measured to work: offered, labelled experimental, doubtful.
+        let measured = self::entry(
+            Category::Creative,
+            vec![rated(macos(), Route::Darling, Rating::Usable)],
+        );
+        let options = run(&measured, &full_host(), &Preferences::default());
         assert_eq!(routes(&options), [Route::Darling]);
         let experimental = options[0]
             .caveats
@@ -2323,6 +2361,14 @@ mod tests {
         assert!(experimental.text.starts_with("Experimental"));
         assert_eq!(options[0].outlook, Outlook::Doubtful);
         assert!(options[0].recommended);
+
+        // A report that it is broken blocks it as well.
+        let broken = self::entry(
+            Category::Creative,
+            vec![rated(macos(), Route::Darling, Rating::Broken)],
+        );
+        let options = run(&broken, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::NoRoute, Route::Darling]);
     }
 
     #[test]

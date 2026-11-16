@@ -157,6 +157,7 @@ QtObject {
     readonly property var caveats: ({
         "community-package": qsTr("This package is maintained by its packagers, not by the application's publisher."),
         "experimental.darling": qsTr("Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications."),
+        "experimental.darling-not-measured": qsTr("TUR offers Darling only for applications measured to work in it, and no test or report says this one does."),
         "guest-unsuitable-for-games": qsTr("A Windows guest is not offered for games: it has no usable GPU acceleration."),
         "guest-not-offered.no-virtual-machines": qsTr("A Windows guest would be offered for this application as well, and is not, because you have chosen never to use a virtual machine. What is lost: the route that runs it on real Windows, which is the one expected to work where Wine does not.")
         // Not the requirement caveats: one identifier is written two ways

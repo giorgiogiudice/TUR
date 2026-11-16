@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The Darling TUR builds, pinned (docs/reports/macos-darling-1.md). Sourced by
+# scripts/darling/build-darling.sh and by .github/workflows/darling-runtime.yml.
+# Change it only in a change of its own, which also updates the build's entry
+# in services/tur-runtime/darling/runtime.json once the build is published.
+#
+# DARLING_COMMIT is master on 15 November 2026 21:16 UTC ("Merge pull request
+# #2171 from darlinghq/update-submodules"): the latest commit, when this was
+# written, whose own CI run built Darling's packages on both architectures
+# (Darling CI run 43762728027: amd64 in 20 minutes, arm64 in 17, with a warm
+# ccache). The submodules are the commits that tree records; the build lists
+# them in its record. Newer commits were all superseded in Darling's CI
+# before they finished, so none had been built.
+DARLING_REPO=https://github.com/darlinghq/darling.git
+DARLING_COMMIT=3fcd2e1aa85079789d19d82415695bdecc512241
+DARLING_CI_RUN=43762728027
+
+# What is built. Darling's components (its build instructions, "Building Only
+# Certain Components"): `cli` (a shell and the command-line programs that
+# applications and installer scripts call) and `gui_stubs` (which includes
+# `gui` and `gui_frameworks`: AppKit, CoreGraphics and the frameworks Cocoa
+# applications link). Not built: Python 2, Ruby, Perl, JavaScriptCore, WebKit
+# and the developer environment. x86-64 only: no i386 slices (macOS has not
+# run 32-bit programs since 10.15) and no Metal (Vulkan translation, not
+# needed by the AppKit applications this route is for).
+DARLING_COMPONENTS=cli,gui_stubs
+DARLING_CMAKE_OPTIONS="-DTARGET_i386=OFF -DENABLE_METAL=OFF -DENABLE_TESTS=OFF"
+
+# Where the build expects to be shown: the path tur-runtime mounts it at,
+# read-only, inside an application's sandbox (crate::sandbox::RUNTIME_TREE_PATH).
+DARLING_INSTALL_PREFIX=/opt/tur-darling
+
+# Where TUR publishes the archive: the repository's own package registry.
+DARLING_PACKAGE=ghcr.io/giorgiogiudice/tur-darling-runtime
+DARLING_MEDIA_TYPE=application/vnd.tur.darling.runtime.v1.tar+xz
+
+# ORAS, which pushes the archive to the registry as an OCI artifact. Release
+# v1.3.6 of 24 October 2026; the SHA-256 is the digest GitHub publishes for
+# the release asset, and the release's own checksums file
+# (oras_1.3.6_checksums.txt) is checked as well.
+ORAS_VERSION=1.3.6
+ORAS_URL=https://github.com/oras-project/oras/releases/download/v1.3.6/oras_1.3.6_linux_amd64.tar.gz
+ORAS_SHA256=66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0

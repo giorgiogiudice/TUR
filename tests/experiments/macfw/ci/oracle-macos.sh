@@ -43,6 +43,22 @@ python3 "$HERE/ci/build_ladder_macos.py" --ladder "$HERE/ladder/ladder.json" --o
 ls "$OUT/bin" "$OUT/apps" || true
 [ -n "$(ls -A "$OUT/bin" 2>/dev/null)" ] || { echo "nothing was built"; exit 1; }
 
+# Disk images of two of the built applications, for the macOS route's
+# integration test (tests/macos-darling, workflow macos-darling), which
+# reuses this job's artifact instead of a macOS job of its own: one HFS+
+# image (UDZO, zlib) and one APFS image (ULFO, LZFSE) of each, made by
+# macOS's own hdiutil from TUR's builds. A failure is recorded, never fatal.
+mkdir -p "$OUT/dmg"
+for app in "rung1-hello.app" "Table Tool.app"; do
+    [ -d "$OUT/apps/$app" ] || continue
+    name=$(basename "$app" .app | tr ' ' '-')
+    hdiutil create -quiet -volname "$name" -srcfolder "$OUT/apps/$app" -fs HFS+ -format UDZO \
+        "$OUT/dmg/$name-hfs.dmg" || echo "hdiutil HFS+ UDZO $app failed" >> "$OUT/dmg/errors.txt"
+    hdiutil create -quiet -volname "$name" -srcfolder "$OUT/apps/$app" -fs APFS -format ULFO \
+        "$OUT/dmg/$name-apfs.dmg" || echo "hdiutil APFS ULFO $app failed" >> "$OUT/dmg/errors.txt"
+done
+ls -l "$OUT/dmg" || true
+
 python3 "$HERE/harness/run_probes.py" --side macos --bin "$OUT/bin" --out "$OUT/results-macos-arm64.json"
 if grep -q '^rosetta: yes' "$OUT/env.txt"; then
     python3 "$HERE/harness/run_probes.py" --side macos --arch x86_64 --bin "$OUT/bin" \

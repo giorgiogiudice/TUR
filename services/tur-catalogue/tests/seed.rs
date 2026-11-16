@@ -265,7 +265,8 @@ fn the_seed_covers_the_applications_with_no_good_route() {
     );
 
     // A Mac-only creative application: no route on a stock machine; with
-    // Darling enabled, one experimental and doubtful route.
+    // Darling enabled still no route, because nothing says it works in
+    // Darling: Darling is listed, blocked, labelled experimental.
     let final_cut = entry(&catalogue, "com.apple.finalcutpro");
     assert!(
         final_cut
@@ -280,13 +281,23 @@ fn the_seed_covers_the_applications_with_no_good_route() {
         AlternativeKind::Mac
     );
     let options = run(final_cut, &full_host(), &nothing_pinned);
-    assert_eq!(routes(&options), [Route::Darling]);
-    assert_eq!(options[0].outlook, Outlook::Doubtful);
+    assert_eq!(routes(&options), [Route::NoRoute, Route::Darling]);
+    assert_eq!(options[1].outlook, Outlook::Blocked);
     assert!(
-        options[0]
+        options[1]
             .caveats
             .iter()
             .any(|caveat| caveat.code == CaveatCode::Experimental)
+    );
+    assert!(
+        options[1]
+            .caveats
+            .iter()
+            .any(|caveat| caveat.text_id == "experimental.darling-not-measured")
+    );
+    assert_eq!(
+        options[0].alternative.as_ref().unwrap().kind,
+        AlternativeKind::Mac
     );
 }
 
