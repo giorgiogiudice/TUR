@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "app.freelens.freelens"
+name = "Freelens"
+publisher = "Freelens (freelensapp)"
+category = "development"
+summary = "Desktop client for Kubernetes clusters."
+homepage = "https://github.com/freelensapp/freelens"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/freelensapp/freelens/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Freelens 2.0.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/freelensapp/freelens/releases/tag/v2.0.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/freelensapp/freelens/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2.0.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "Freelens-2.0.0-windows-amd64.exe"
+package_sha256 = "b777e99397aeec525f7d8a8e0f29b9550266a385c283338fd18c1003928d95b6"
+package_size = 178243904
+runtime = "electron"
+runtime_version = "44.10.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Freelens 2.0.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/freelensapp/freelens/releases/tag/v2.0.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/freelensapp/freelens/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2.0.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "Freelens-2.0.0-macos-amd64.pkg"
+package_sha256 = "235e48507f7c29d6f687907d33cbe3185a54cdb001bba6947c2f59c2f8c25e37"
+package_size = 221814951
+runtime = "electron"
+runtime_version = "44.10.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Freelens 2.0.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/freelensapp/freelens/releases/tag/v2.0.0"
+checked = "2026-11-16"

@@ -143,7 +143,7 @@ const QStringList &Answers::routes()
 {
     static const QStringList values {
         QStringLiteral("flatpak"), QStringLiteral("native"), QStringLiteral("distro-container"),
-        QStringLiteral("proton"), QStringLiteral("wine"), QStringLiteral("windows-guest"),
+        QStringLiteral("rehost"), QStringLiteral("proton"), QStringLiteral("wine"), QStringLiteral("windows-guest"),
         QStringLiteral("android-runtime"), QStringLiteral("darling"), QStringLiteral("web"),
         QStringLiteral("no-route"),
     };

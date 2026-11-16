@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "chat.rocket.desktop"
+name = "Rocket.Chat"
+publisher = "Rocket.Chat"
+category = "communication"
+summary = "Desktop client for Rocket.Chat team chat."
+homepage = "https://github.com/RocketChat/Rocket.Chat.Electron"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/RocketChat/Rocket.Chat.Electron/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Rocket.Chat 4.19.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/RocketChat/Rocket.Chat.Electron/releases/tag/4.19.3"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/RocketChat/Rocket.Chat.Electron/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "4.19.3"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "rocketchat-4.19.3-win-x64.exe"
+package_sha256 = "3e0a321dc4cd04504d867e900d01ed3c7dc5637aac9c6ae63f6230aa1eb788d3"
+package_size = 119101904
+runtime = "electron"
+runtime_version = "43.8.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Rocket.Chat 4.19.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/RocketChat/Rocket.Chat.Electron/releases/tag/4.19.3"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/RocketChat/Rocket.Chat.Electron/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "4.19.3"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "rocketchat-4.19.3-mac.zip"
+package_sha256 = "f88f60b0a06d0476d5595d94e763902194f498e1c32e2e432cd1235e6a416fa8"
+package_size = 234009376
+runtime = "electron"
+runtime_version = "43.8.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = ["fsevents@2.3.3"]
+
+[[editions.references]]
+title = "Rocket.Chat 4.19.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/RocketChat/Rocket.Chat.Electron/releases/tag/4.19.3"
+checked = "2026-11-16"

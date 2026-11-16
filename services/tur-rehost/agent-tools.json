@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Rehost1",
+  "tools": [
+    {
+      "name": "rehost_detect",
+      "description": "Say whether a Windows or macOS package (installer, archive, disk image, or an unpacked application) carries a portable runtime that TUR can run natively on Linux's own build of that runtime (Electron), at which version, and which platform-specific parts it has. The package is opened in a sandbox and never run; nothing is downloaded. Only files the assistant has been given access to for this task can be read.",
+      "class": 0,
+      "method": "Detect",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The full path of the package or application directory.",
+            "minLength": 1,
+            "maxLength": 1999
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rehost_plan",
+      "description": "Show what running a Windows or macOS package natively on Linux's own build of its runtime would do, without doing it: which runtime version would be downloaded from where, which native parts would be fetched or would have to be built on this computer, what the person is told about media codecs, and why it would be refused if it cannot work. Nothing is downloaded, installed or started.",
+      "class": 0,
+      "method": "Plan",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The full path of the package or application directory.",
+            "minLength": 1,
+            "maxLength": 1999
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rehost_list",
+      "description": "List the applications that run natively through their portable runtime (Windows or macOS packages re-hosted on Linux's own build of Electron): name, version, which package they came from and the runtime version. Nothing is changed or started.",
+      "class": 0,
+      "method": "List",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rehost_show",
+      "description": "Show the record of one re-hosted application: the package it came from with its digest, the runtime and where it was downloaded from, how each native part was supplied, and what was fetched. Nothing is changed or started.",
+      "class": 0,
+      "method": "Show",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "An application identifier from rehost_list, such as com.vscodium.vscodium.",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": ["app_id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

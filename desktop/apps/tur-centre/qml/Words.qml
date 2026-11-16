@@ -24,6 +24,8 @@ QtObject {
         "native": qsTr("Linux application"),
         //: An application packaged for another Linux system, when the catalogue does not name the system.
         "distro-container": qsTr("Linux application, from another Linux system"),
+        //: The publisher's Windows or Mac package, re-hosted on the Linux build of the runtime it was made with, such as Electron.
+        "rehost": qsTr("Runs on its own runtime"),
         "proton": qsTr("Windows game, through Proton"),
         "wine": qsTr("Windows application, in the compatibility layer"),
         "windows-guest": qsTr("Windows application, in Windows"),
@@ -37,6 +39,7 @@ QtObject {
         "flatpak": qsTr("Made for Linux. Runs directly."),
         "native": qsTr("Made for Linux. Runs directly."),
         "distro-container": qsTr("Made for another Linux system. Runs in a small copy of that system."),
+        "rehost": qsTr("The Windows or Mac package, running natively on Linux's build of the runtime it was made with. Tested by TUR; not supported by the publisher."),
         "proton": qsTr("Runs without Windows, through Proton, the compatibility layer used by the Steam Deck."),
         "wine": qsTr("Runs without Windows. Fastest and lightest, but not every application works."),
         "windows-guest": qsTr("Runs inside a real Windows that TUR starts in the background (a virtual machine). Needs your own Windows licence and more memory."),

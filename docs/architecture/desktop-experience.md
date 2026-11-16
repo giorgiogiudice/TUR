@@ -1156,6 +1156,7 @@ engine unless the engine is something the user may already know.
 |---|---|---|
 | `flatpak`, `native` | Linux application | Made for Linux. Runs directly. |
 | `distro-container` | Linux application, from _Ubuntu_ | Made for another Linux system. Runs in a small copy of that system. |
+| `rehost` | Runs on its own runtime | The Windows or Mac package, running natively on Linux's build of the runtime it was made with. Tested by TUR; not supported by the publisher. |
 | `proton` | Windows game, through Proton | Runs without Windows, through Proton, the compatibility layer used by the Steam Deck. |
 | `wine` | Windows application, in the compatibility layer | Runs without Windows. Fastest and lightest, but not every application works. |
 | `windows-guest` | Windows application, in Windows | Runs inside a real Windows that TUR starts in the background (a virtual machine). Needs your own Windows licence and more memory. |

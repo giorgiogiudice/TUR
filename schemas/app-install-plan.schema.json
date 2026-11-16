@@ -25,8 +25,8 @@
       }
     },
     "route": {
-      "description": "The routes tur-apps installs by. Every other route is refused with TUR-DESKTOP-APPS-004.",
-      "enum": ["flatpak", "wine"]
+      "description": "The routes tur-apps installs by: a Flatpak, a Windows application through tur-runtime (wine), and the person's Windows or macOS package re-hosted through tur-rehost on the Linux build of its own runtime (rehost). Every other route is refused with TUR-DESKTOP-APPS-004.",
+      "enum": ["flatpak", "wine", "rehost"]
     },
     "chosen_by": {
       "description": "router: the router's recommendation; you: a route the user chose among those the router offers.",
@@ -44,7 +44,7 @@
       "properties": {
         "facts": { "type": "object", "description": "The router's host facts." },
         "how": {
-          "description": "detected: flatpak, Wine and the architecture were looked at, everything else is the router's default; stated: read from --host.",
+          "description": "detected: flatpak, Wine, tur-rehost and the architecture were looked at, and rehost_builds is the person's --allow-builds; everything else is the router's default. stated: read from --host.",
           "enum": ["detected", "stated"]
         }
       }
@@ -60,7 +60,7 @@
         "url": { "type": ["string", "null"] },
         "file": { "type": ["string", "null"] },
         "verification": {
-          "description": "How what is installed is checked before it is used: Flatpak's check against the remote's signing key; the SHA-256 the catalogue pins; or, for a user's file with no pin, the statement that it cannot be checked and that its digest is recorded.",
+          "description": "How what is installed is checked before it is used: Flatpak's check against the remote's signing key; the SHA-256 the catalogue pins; for a user's file with no pin, the statement that it cannot be checked and that its digest is recorded; for a re-hosted package, whether it is the package TUR measured (its SHA-256 equals the one in the catalogue's record of TUR's test) or a file TUR has not tested.",
           "type": "string"
         }
       }
@@ -84,7 +84,7 @@
     },
     "installs": { "type": "array", "items": { "$ref": "#/$defs/place" } },
     "access": {
-      "description": "What the application may reach, in the words the application centre uses for every route. For a Flatpak, from the permissions in its metadata; for a Windows application, from tur-runtime's sandbox.",
+      "description": "What the application may reach, in the words the application centre uses for every route. For a Flatpak, from the permissions in its metadata; for a Windows application, from tur-runtime's sandbox; for a re-hosted application, from tur-rehost's application sandbox.",
       "type": "array",
       "items": {
         "type": "object",

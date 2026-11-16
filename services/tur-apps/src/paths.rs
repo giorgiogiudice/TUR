@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
-//! Where things are: this program's own records, and the places Flatpak and
-//! `tur-runtime` put an application.
+//! Where things are: this program's own records, and the places Flatpak,
+//! `tur-runtime` and `tur-rehost` put an application.
 //!
 //! Everything is per user. Nothing here is written outside the user's own
 //! data, state and cache directories.
@@ -143,6 +143,35 @@ impl Dirs {
     pub fn runtime_launcher(&self, app_id: &str) -> PathBuf {
         self.runtime_root().join("launchers").join(app_id)
     }
+
+    /// The root of what `tur-rehost` keeps for its applications:
+    /// `$XDG_DATA_HOME/tur/rehost`.
+    pub fn rehost_root(&self) -> PathBuf {
+        self.data_home.join("tur/rehost")
+    }
+
+    /// The directory `tur-rehost` keeps for one re-hosted application: its
+    /// files laid under the runtime (`app/`), its private home and its
+    /// record.
+    pub fn rehost_app(&self, app_id: &str) -> PathBuf {
+        self.rehost_root().join("apps").join(app_id)
+    }
+
+    /// A re-hosted application's private home: its settings and what it
+    /// saves.
+    pub fn rehost_home(&self, app_id: &str) -> PathBuf {
+        self.rehost_app(app_id).join("home")
+    }
+
+    /// The directory of a re-hosted application's staged launcher entry.
+    pub fn rehost_launcher(&self, app_id: &str) -> PathBuf {
+        self.rehost_root().join("launchers").join(app_id)
+    }
+
+    /// A re-hosted application's staged launcher entry.
+    pub fn rehost_desktop_entry(&self, app_id: &str) -> PathBuf {
+        self.rehost_launcher(app_id).join(format!("tur-rehost-{app_id}.desktop"))
+    }
 }
 
 /// Shows a path with the user's home directory written as `~`.
@@ -206,6 +235,16 @@ mod tests {
         assert_eq!(
             found.runtime_home("org.example.app"),
             PathBuf::from("/home/u/.local/share/tur/runtime/prefixes/org.example.app/home")
+        );
+        assert_eq!(
+            found.rehost_home("org.example.app"),
+            PathBuf::from("/home/u/.local/share/tur/rehost/apps/org.example.app/home")
+        );
+        assert_eq!(
+            found.rehost_desktop_entry("org.example.app"),
+            PathBuf::from(
+                "/home/u/.local/share/tur/rehost/launchers/org.example.app/tur-rehost-org.example.app.desktop"
+            )
         );
     }
 

@@ -10,9 +10,10 @@ use clap::{Parser, Subcommand};
 pub const INSTALLED_CATALOGUE: &str = "/usr/share/tur/catalogue";
 
 /// Installs, lists, updates and removes applications by the route the
-/// catalogue's router chooses: Flatpak from a remote, or a Windows
-/// application through tur-runtime. Every installation shows its plan
-/// first.
+/// catalogue's router chooses: Flatpak from a remote, a Windows
+/// application through tur-runtime, or the Windows or macOS package you
+/// have, re-hosted on its runtime's Linux build through tur-rehost. Every
+/// installation shows its plan first.
 #[derive(Parser, Debug)]
 #[command(name = "tur-apps", version)]
 pub struct Cli {
@@ -36,6 +37,10 @@ pub struct Cli {
     /// The tur-runtime program.
     #[arg(long, global = true, value_name = "PATH")]
     pub tur_runtime_program: Option<PathBuf>,
+    /// The tur-rehost program, whose presence the router is also told
+    /// about.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub tur_rehost_program: Option<PathBuf>,
     /// The wine program, whose presence the router is told about.
     #[arg(long, global = true, value_name = "PATH")]
     pub wine_program: Option<PathBuf>,
@@ -56,12 +61,18 @@ pub enum Command {
         /// The catalogue identifier.
         id: String,
         /// A route the router offers, instead of the one it recommends:
-        /// flatpak or wine.
+        /// flatpak, rehost or wine.
         #[arg(long, value_name = "ROUTE")]
         route: Option<String>,
-        /// An installer file you have, for a Windows application.
+        /// An installer file you have, for a Windows application; for the
+        /// rehost route, the Windows or macOS package.
         #[arg(long, value_name = "FILE")]
         installer: Option<PathBuf>,
+        /// Allow a re-hosted application's native modules to be built from
+        /// source on this computer, without network, with Fedora's
+        /// compiler.
+        #[arg(long)]
+        allow_builds: bool,
         /// Ask no remote for sizes, commits or permissions.
         #[arg(long)]
         offline: bool,
@@ -77,9 +88,15 @@ pub enum Command {
         /// A route the router offers, instead of the one it recommends.
         #[arg(long, value_name = "ROUTE")]
         route: Option<String>,
-        /// An installer file you have, for a Windows application.
+        /// An installer file you have, for a Windows application; for the
+        /// rehost route, the Windows or macOS package.
         #[arg(long, value_name = "FILE")]
         installer: Option<PathBuf>,
+        /// Allow a re-hosted application's native modules to be built from
+        /// source on this computer, without network, with Fedora's
+        /// compiler.
+        #[arg(long)]
+        allow_builds: bool,
         /// Confirm in advance: carry the plan out without asking.
         #[arg(long)]
         yes: bool,

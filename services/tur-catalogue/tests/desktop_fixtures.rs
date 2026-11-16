@@ -354,6 +354,7 @@ fn vocabulary() -> String {
         CaveatCode::GuestNotOffered,
         CaveatCode::GuestUnsuitableForGames,
         CaveatCode::PinUnavailable,
+        CaveatCode::Rehost,
     ];
     let count = |value: &CaveatCode| match value {
         CaveatCode::Requirement
@@ -365,9 +366,10 @@ fn vocabulary() -> String {
         | CaveatCode::ReportedInadequate
         | CaveatCode::GuestNotOffered
         | CaveatCode::GuestUnsuitableForGames
-        | CaveatCode::PinUnavailable => 1usize,
+        | CaveatCode::PinUnavailable
+        | CaveatCode::Rehost => 1usize,
     };
-    assert_eq!(caveat_codes.iter().map(count).sum::<usize>(), 10);
+    assert_eq!(caveat_codes.iter().map(count).sum::<usize>(), 11);
 
     let prerequisite_codes = [
         PrerequisiteCode::InstallFlatpak,
@@ -378,6 +380,8 @@ fn vocabulary() -> String {
         PrerequisiteCode::OptIntoGooglePlay,
         PrerequisiteCode::SetUpWindowsGuest,
         PrerequisiteCode::ProvideWindowsLicence,
+        PrerequisiteCode::InstallRehost,
+        PrerequisiteCode::AllowRehostBuilds,
     ];
     let count = |value: &PrerequisiteCode| match value {
         PrerequisiteCode::InstallFlatpak
@@ -387,9 +391,11 @@ fn vocabulary() -> String {
         | PrerequisiteCode::EnableAndroidRuntime
         | PrerequisiteCode::OptIntoGooglePlay
         | PrerequisiteCode::SetUpWindowsGuest
-        | PrerequisiteCode::ProvideWindowsLicence => 1usize,
+        | PrerequisiteCode::ProvideWindowsLicence
+        | PrerequisiteCode::InstallRehost
+        | PrerequisiteCode::AllowRehostBuilds => 1usize,
     };
-    assert_eq!(prerequisite_codes.iter().map(count).sum::<usize>(), 8);
+    assert_eq!(prerequisite_codes.iter().map(count).sum::<usize>(), 10);
 
     let alternative_kinds = [
         AlternativeKind::DualBoot,
@@ -710,7 +716,7 @@ fn a_fixture_file_keeps_the_router_s_text_and_carries_the_licence_identifier() {
 
     let vocabulary: Value = serde_json::from_str(&vocabulary()).unwrap();
     assert_eq!(vocabulary["licence"], LICENCE);
-    assert_eq!(vocabulary["routes"].as_array().unwrap().len(), 10);
+    assert_eq!(vocabulary["routes"].as_array().unwrap().len(), 11);
     assert_eq!(vocabulary["ratings"].as_array().unwrap().len(), 5);
     assert_eq!(
         vocabulary["rating_source_kinds"],

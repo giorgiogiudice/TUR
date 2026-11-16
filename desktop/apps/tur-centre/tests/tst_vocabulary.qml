@@ -59,6 +59,9 @@ Item {
                   explanation: "Made for Linux. Runs directly." },
                 { tag: "native", route: "native", label: "Linux application",
                   explanation: "Made for Linux. Runs directly." },
+                { tag: "rehost", route: "rehost", label: "Runs on its own runtime",
+                  explanation: "The Windows or Mac package, running natively on Linux's build of the runtime it was made "
+                               + "with. Tested by TUR; not supported by the publisher." },
                 { tag: "proton", route: "proton", label: "Windows game, through Proton",
                   explanation: "Runs without Windows, through Proton, the compatibility layer used by the Steam Deck." },
                 { tag: "wine", route: "wine", label: "Windows application, in the compatibility layer",

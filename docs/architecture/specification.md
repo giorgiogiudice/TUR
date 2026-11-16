@@ -2056,6 +2056,7 @@ Suggested families:
 - `TUR-DIAG-*`
 - `TUR-RUNTIME-*` (added 12 November 2026: the runtime manager)
 - `TUR-CATALOGUE-*` (added 12 November 2026: reserved; the catalogue's codes have not moved to it)
+- `TUR-REHOST-*` (added 16 November 2026: re-hosting a Windows or macOS package on the Linux build of its runtime, `tur-rehost`)
 
 Each code must have a registry entry with title, severity, detection criteria, user message, technical explanation, recovery action, and tests.
 

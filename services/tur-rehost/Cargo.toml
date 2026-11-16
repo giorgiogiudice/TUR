@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-rehost"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR re-hosting: runs the portable payload of a Windows or macOS package (Electron first) on the Linux build of the same runtime, fetched at the payload's exact version and checked against TUR's pinned index. It never runs an installer."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_rehost"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-rehost"
+path = "src/main.rs"
+
+# The same four third-party crates tur-apps uses, all MIT OR Apache-2.0.
+# There is no HTTP client, no TLS library and no archive library here:
+# downloads run the system's curl (as in tur-apps, ADR-0019) and containers
+# are opened by Fedora's archive tools inside bubblewrap.
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Command-line parsing, without colour or suggestions; no argument comes
+# from the environment.
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+# SHA-256 of every file fetched, checked against TUR's pinned index before
+# anything in it is used.
+sha2 = "0.10"
+
+[dev-dependencies]
+# P@x's loader of tool manifests and adapters, to check the ones this
+# component ships (tests/agent_tools.rs). Only that test uses it.
+tur-pax = { path = "../tur-pax" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

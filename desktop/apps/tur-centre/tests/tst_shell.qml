@@ -66,12 +66,14 @@ Item {
             verify(field.activeFocus, "the search field has the keyboard when the window opens")
             compare(findChild(shell, "shellTitle").text, "Application centre")
 
-            // Home carries its standing sentence, word for word, once the
-            // catalogue's counts say that TUR has rated nothing itself.
+            // Home's standing sentence stands only while it is true. The
+            // seed catalogue's counts now hold ratings from TUR's own tests
+            // (the re-hosting experiment, docs/reports/exp-rehost-1.md), so
+            // it is not said; its words are kept for a catalogue without.
             const sentence = findChild(shell, "homeStandingSentence")
             verify(sentence !== null)
-            tryVerify(() => sentence.visible, 5000)
-            compare(host.catalogue.statistics.rated_by_tur_tests, 0)
+            tryVerify(() => host.catalogue.statistics.rated_by_tur_tests === 40, 5000)
+            verify(!sentence.visible)
             compare(sentence.text,
                     "TUR has not tested applications itself yet. Every rating here is what the named source reports.")
             // Nothing was searched or looked up to show Home.
@@ -87,12 +89,12 @@ Item {
             verify(!findChild(shell, "homeStandingSentence").visible)
             // With the counts, it is said exactly while TUR has rated
             // nothing: the condition reads `rated_by_tur_tests` and nothing
-            // else.
+            // else. The seed catalogue holds 40 of TUR's own ratings.
             shell = host.start("default", "")
-            tryVerify(() => host.catalogue.statistics.rated_by_tur_tests === 0, 5000)
+            tryVerify(() => host.catalogue.statistics.rated_by_tur_tests === 40, 5000)
             const home = findChild(shell, "shellView").item
-            verify(home.turHasRatedNothing)
-            verify(findChild(shell, "homeStandingSentence").visible)
+            verify(!home.turHasRatedNothing)
+            verify(!findChild(shell, "homeStandingSentence").visible)
         }
 
         function test_home_offers_chrome_and_says_where_it_comes_from() {

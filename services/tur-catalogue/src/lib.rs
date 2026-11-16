@@ -74,13 +74,14 @@ pub use date::Date;
 pub use host::{Arch, GpuClass, HostFacts, Preferences, parse_host_facts, parse_preferences};
 pub use model::{
     AndroidStore, Category, Edition, EditionKind, Entry, EntryKind, Installer, Licence, Obtain,
-    Packaging, Rating, Record, Reference, Reporter, Requirement, Route, SCHEMA_VERSION,
-    parse_entry,
+    Packaging, Rating, Record, Reference, RehostEvidence, Reporter, Requirement, Route,
+    SCHEMA_VERSION, parse_entry,
 };
 pub use route::{
     ALTERNATIVE_TEXT_IDS, Alternative, AlternativeKind, AutopilotSettings, CAVEAT_TEXT_IDS, Caveat,
     CaveatCode, Outlook, Params, Prerequisite, PrerequisiteCode, RatingSource, ReasonCode,
-    ReasonPart, RouteOption, RouteRequest, Severity, recommended, requirement_severity, route,
+    ReasonPart, RouteOption, RouteRequest, Severity, recommended, rehost_evidence,
+    requirement_severity, route,
 };
 pub use search::{MatchKind, SearchHit, search};
 pub use validate::{validate_catalogue, validate_entry};

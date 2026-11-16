@@ -4,8 +4,8 @@
 //! the catalogue's router chooses.
 //!
 //! ```text
-//! tur-apps plan <id> [--route R] [--installer FILE] [--offline] [--json]
-//! tur-apps install <id> [--route R] [--installer FILE] [--yes] [--events]
+//! tur-apps plan <id> [--route R] [--installer FILE] [--allow-builds] [--offline] [--json]
+//! tur-apps install <id> [--route R] [--installer FILE] [--allow-builds] [--yes] [--events]
 //! tur-apps list [--check-updates] [--json]
 //! tur-apps update <id> [--events]
 //! tur-apps remove <id> [--keep-data | --delete-data] [--events]
@@ -82,6 +82,11 @@ fn context(cli: &Cli) -> Result<Context, Failure> {
             &cli.tur_runtime_program,
             &["/usr/bin/tur-runtime", "/usr/local/bin/tur-runtime"],
         ),
+        tur_rehost: program(
+            "tur-rehost",
+            &cli.tur_rehost_program,
+            &["/usr/bin/tur-rehost", "/usr/local/bin/tur-rehost"],
+        ),
         wine: cli
             .wine_program
             .clone()
@@ -100,7 +105,7 @@ fn parse_route(name: Option<&str>) -> Result<Option<Route>, Failure> {
             .ok_or_else(|| {
                 Failure::new(
                     Code::InputInvalid,
-                    format!("\"{name}\" is not a route; the routes this program installs by are flatpak and wine"),
+                    format!("\"{name}\" is not a route; the routes this program installs by are flatpak, rehost and wine"),
                 )
             }),
     }
@@ -168,6 +173,7 @@ fn run(cli: Cli) -> u8 {
             id,
             route,
             installer,
+            allow_builds,
             offline,
             json,
         } => {
@@ -177,6 +183,7 @@ fn run(cli: Cli) -> u8 {
                     route,
                     installer,
                     offline,
+                    allow_builds,
                 },
                 Err(failure) => return report(json, &failure),
             };
@@ -196,6 +203,7 @@ fn run(cli: Cli) -> u8 {
             id,
             route,
             installer,
+            allow_builds,
             yes,
             events,
         } => {
@@ -211,6 +219,7 @@ fn run(cli: Cli) -> u8 {
                     route,
                     installer,
                     offline: false,
+                    allow_builds,
                 },
                 Err(failure) => return finish(&mut emitter, "install", Err(failure)),
             };

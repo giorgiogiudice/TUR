@@ -182,6 +182,18 @@ pub fn render_entry(entry: &Entry) -> String {
             if let Some(notes) = &record.notes {
                 let _ = writeln!(out, "      {notes}");
             }
+            if let Some(evidence) = &record.rehost {
+                let _ = writeln!(
+                    out,
+                    "      Measured: {} ({} bytes, SHA-256 {}) on {} {} for Linux; evidence {}",
+                    evidence.package,
+                    evidence.package_size,
+                    evidence.package_sha256,
+                    evidence.runtime,
+                    evidence.runtime_version,
+                    evidence.evidence
+                );
+            }
         }
         for reference in &edition.references {
             let _ = writeln!(

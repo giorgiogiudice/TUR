@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Rehost1",
+  "adapters": [
+    {
+      "tool": "rehost_detect",
+      "kind": "command",
+      "program": "/usr/bin/tur-rehost",
+      "arguments": [
+        { "literal": "detect" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "path" }
+      ],
+      "success_exit_codes": [0, 3]
+    },
+    {
+      "tool": "rehost_plan",
+      "kind": "command",
+      "program": "/usr/bin/tur-rehost",
+      "arguments": [
+        { "literal": "plan" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "path" }
+      ],
+      "success_exit_codes": [0, 3, 4]
+    },
+    {
+      "tool": "rehost_list",
+      "kind": "command",
+      "program": "/usr/bin/tur-rehost",
+      "arguments": [
+        { "literal": "list" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0]
+    },
+    {
+      "tool": "rehost_show",
+      "kind": "command",
+      "program": "/usr/bin/tur-rehost",
+      "arguments": [
+        { "literal": "show" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "app_id" }
+      ],
+      "success_exit_codes": [0, 6]
+    }
+  ]
+}

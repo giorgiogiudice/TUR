@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "LicenseRef-TUR-Noncommercial-1.0.0"
-description = "TUR application installer: plans, installs, lists, updates and removes applications by the route the catalogue's router chooses (Flatpak from a remote, or a Windows application through tur-runtime)."
+description = "TUR application installer: plans, installs, lists, updates and removes applications by the route the catalogue's router chooses (Flatpak from a remote, a Windows application through tur-runtime, or a Windows or macOS package re-hosted through tur-rehost)."
 repository = "https://github.com/giorgiogiudice/TUR"
 publish = false
 

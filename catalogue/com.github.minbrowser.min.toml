@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.github.minbrowser.min"
+name = "Min"
+publisher = "Min (minbrowser)"
+category = "internet"
+summary = "Minimal web browser."
+homepage = "https://github.com/minbrowser/min"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/minbrowser/min/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Min 1.35.7 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/minbrowser/min/releases/tag/v1.35.7"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/minbrowser/min/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.35.7"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "Min-v1.35.7-windows.zip"
+package_sha256 = "6659766134e4d45bd75ac385390b02cea8284a58b37a9f60af2e193a9e04b3d5"
+package_size = 162454550
+runtime = "electron"
+runtime_version = "43.4.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Min 1.35.7 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/minbrowser/min/releases/tag/v1.35.7"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/minbrowser/min/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.35.7"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "min-v1.35.7-mac-x86.zip"
+package_sha256 = "0e13a1335a251949bc99482a435d715522a7653c0df472c40e971c1aeaed721c"
+package_size = 133305152
+runtime = "electron"
+runtime_version = "43.4.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Min 1.35.7 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/minbrowser/min/releases/tag/v1.35.7"
+checked = "2026-11-15"

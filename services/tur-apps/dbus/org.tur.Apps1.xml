@@ -37,8 +37,11 @@
       Plan: what installing the application would do. Changes nothing.
       id: the catalogue identifier.
       options: "route" (s): a route the router offers instead of its
-      recommendation; "installer" (s): a file the user supplies; "offline"
-      (b): ask no remote.
+      recommendation ("flatpak", "wine" or "rehost"); "installer" (s): a
+      file the user supplies (for "rehost", the Windows or macOS package,
+      which TUR never downloads); "allow_builds" (b): the user allows a
+      re-hosted application's native modules to be built from source on
+      this computer; "offline" (b): ask no remote.
       plan: JSON plan, or JSON {"error": ...}.
     -->
     <method name="Plan">
@@ -51,7 +54,7 @@
       Install: carry out the plan for the application. Returns when the job
       has started; Event reports it. The service shows the plan through the
       caller and installs only after the user confirmed it there.
-      options: as for Plan.
+      options: as for Plan, without "offline".
       job: the job's identifier.
     -->
     <method name="Install">
@@ -93,7 +96,8 @@
     </method>
 
     <!--
-      ListInstalled: everything installed for the user, across routes.
+      ListInstalled: everything installed for the user, across routes
+      (flatpak, wine, rehost).
       options: "check_updates" (b): ask the sources for updates.
       list: JSON document of kind "installed".
     -->

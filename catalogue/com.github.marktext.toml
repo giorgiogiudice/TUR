@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.github.marktext"
+name = "MarkText"
+publisher = "MarkText"
+category = "productivity"
+summary = "Markdown editor."
+homepage = "https://github.com/marktext/marktext"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/marktext/marktext/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "MarkText 0.23.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/marktext/marktext/releases/tag/v0.23.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/marktext/marktext/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "0.23.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "marktext-win-x64-0.23.0-setup.exe"
+package_sha256 = "49bf66035f92072ce7dd8fa2f88b91f7036d674c05f872355a2d6e366fc53964"
+package_size = 132435617
+runtime = "electron"
+runtime_version = "42.1.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["ced@2.0.0", "native-keymap@3.3.9"]
+unresolved = []
+
+[[editions.references]]
+title = "MarkText 0.23.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/marktext/marktext/releases/tag/v0.23.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/marktext/marktext/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "0.23.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "marktext-mac-x64-0.23.0.zip"
+package_sha256 = "2ad2fb2f335e4452dd9c4af1d101e3bd7a8411b0a8857c92f5ccebf686c11de5"
+package_size = 164694542
+runtime = "electron"
+runtime_version = "42.1.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["ced@2.0.0", "native-keymap@3.3.9"]
+unresolved = []
+
+[[editions.references]]
+title = "MarkText 0.23.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/marktext/marktext/releases/tag/v0.23.0"
+checked = "2026-11-16"

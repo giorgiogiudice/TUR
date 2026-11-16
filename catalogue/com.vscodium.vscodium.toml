@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.vscodium.vscodium"
+name = "VSCodium"
+publisher = "VSCodium"
+category = "development"
+summary = "Build of Visual Studio Code's open source, without Microsoft's branding and telemetry."
+homepage = "https://github.com/VSCodium/vscodium"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/VSCodium/vscodium/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "VSCodium 1.143.17232 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/VSCodium/vscodium/releases/tag/1.143.17232"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/VSCodium/vscodium/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.143.17232"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "VSCodium-win32-x64-1.143.17232.zip"
+package_sha256 = "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d"
+package_size = 231406156
+runtime = "electron"
+runtime_version = "43.7.7"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = [
+    "@parcel/watcher@2.5.6",
+    "@vscode/deviceid@0.1.5",
+    "@vscode/native-watchdog@1.4.6",
+    "@vscode/spdlog@0.15.8",
+    "@vscode/sqlite3@5.1.12-vscode",
+    "@vscode/windows-mutex@0.5.3",
+    "@vscode/windows-process-tree@0.8.0",
+    "@vscode/windows-registry@1.3.0",
+    "@vscodium/native-keymap@3.3.9-260952",
+    "@vscodium/policy-watcher@1.6.0-267136",
+    "native-is-elevated@0.9.0",
+    "windows-foreground-love@0.6.1",
+]
+unresolved = ["microsoft-authentication@0.0.1", "@vscode/windows-ca-certs@0.3.4"]
+
+[[editions.references]]
+title = "VSCodium 1.143.17232 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/VSCodium/vscodium/releases/tag/1.143.17232"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/VSCodium/vscodium/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.143.17232"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "VSCodium-darwin-x64-1.143.17232.zip"
+package_sha256 = "6f11e188a16decf417623a94593370ee87fc40445d09c0ff49e30af57a5087f5"
+package_size = 215768189
+runtime = "electron"
+runtime_version = "43.7.7"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = [
+    "@parcel/watcher@2.5.6",
+    "@vscode/deviceid@0.1.5",
+    "@vscode/native-watchdog@1.4.6",
+    "@vscode/spdlog@0.15.8",
+    "@vscode/sqlite3@5.1.12-vscode",
+    "@vscodium/native-keymap@3.3.9-260952",
+    "@vscodium/policy-watcher@1.6.0-267136",
+    "native-is-elevated@0.9.0",
+    "windows-foreground-love@0.6.1",
+]
+unresolved = ["@vscode/fs-copyfile@2.0.0", "microsoft-authentication@0.0.1"]
+
+[[editions.references]]
+title = "VSCodium 1.143.17232 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/VSCodium/vscodium/releases/tag/1.143.17232"
+checked = "2026-11-16"

@@ -36,8 +36,8 @@ pub enum Code {
     DownloadFailed,
     /// The source the application comes from is not switched on.
     SourceOff,
-    /// A program this needs (flatpak, curl, tur-runtime, Wine) is not
-    /// installed.
+    /// A program this needs (flatpak, curl, tur-runtime, tur-rehost, Wine)
+    /// is not installed, or a prerequisite the router names is not met.
     ProgramMissing,
     /// A step failed while the operation was carried out.
     StepFailed,

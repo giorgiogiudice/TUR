@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use tur_catalogue::{
     Arch, Catalogue, Date, Edition, EditionKind, Entry, HostFacts, Installer, Licence, Obtain,
-    Preferences, Route, RouteOption, RouteRequest, parse_host_facts, parse_preferences,
-    recommended, route,
+    Preferences, PrerequisiteCode, Route, RouteOption, RouteRequest, parse_host_facts,
+    parse_preferences, recommended, rehost_evidence, route,
 };
 
 use crate::codes::{Code, Failure};
@@ -30,6 +30,7 @@ use crate::events::human_size;
 use crate::exec::Program;
 use crate::flatpak::{self, Access, KnownSource, Metadata};
 use crate::paths::{Dirs, display};
+use crate::rehost::{self, RehostOptions};
 
 /// The version of the plan format.
 pub const PLAN_VERSION: u32 = 1;
@@ -50,6 +51,8 @@ pub struct Context {
     pub curl: Program,
     /// `tur-runtime`.
     pub tur_runtime: Program,
+    /// `tur-rehost`, whose presence is also a fact the router needs.
+    pub tur_rehost: Program,
     /// Wine, whose presence is a fact the router needs.
     pub wine: PathBuf,
     /// A host-facts file that replaces detection.
@@ -65,10 +68,17 @@ pub struct Request {
     pub id: String,
     /// A route the user chose instead of the router's recommendation.
     pub route: Option<Route>,
-    /// An installer file the user supplies.
+    /// An installer file the user supplies: for the re-hosted route, the
+    /// publisher's Windows or macOS package.
     pub installer: Option<PathBuf>,
     /// Do not ask any remote for sizes, commits or permissions.
     pub offline: bool,
+    /// The person allows native modules of a re-hosted application to be
+    /// built from source on this computer. It is the router's host fact
+    /// `rehost_builds` when the facts are looked at here (not when a
+    /// host-facts file states them), and it is passed to `tur-rehost` as
+    /// `--allow-builds`.
+    pub allow_builds: bool,
 }
 
 /// The application, as the catalogue names it.
@@ -89,8 +99,10 @@ pub struct Application {
 pub struct HostReport {
     /// The facts.
     pub facts: HostFacts,
-    /// `detected`: flatpak, Wine and the architecture were looked at, the
-    /// rest assumed as the router's defaults; `stated`: read from a file.
+    /// `detected`: flatpak, Wine, tur-rehost and the architecture were
+    /// looked at, and whether the person allowed source builds was taken
+    /// from `--allow-builds`; the rest assumed as the router's defaults.
+    /// `stated`: read from a file.
     pub how: &'static str,
 }
 
@@ -185,6 +197,19 @@ pub enum Execution {
         file: WindowsFile,
         /// The file is the program itself.
         portable: bool,
+    },
+    /// Re-host a Windows or macOS package through `tur-rehost`.
+    Rehost {
+        /// The identifier `tur-rehost` keeps it under.
+        app_id: String,
+        /// The person's package.
+        package: PathBuf,
+        /// Its digest and size, when the plan was made.
+        hashed: Hashed,
+        /// Whether it is the package TUR measured.
+        measured: bool,
+        /// What `tur-rehost` is allowed.
+        options: RehostOptions,
     },
 }
 
@@ -287,8 +312,10 @@ pub fn load_catalogue(directory: &Path) -> Result<Catalogue, Failure> {
 }
 
 /// The facts the router is given: read from the host-facts file, or
-/// looked at here.
-pub fn host_facts(context: &Context) -> Result<HostReport, Failure> {
+/// looked at here. `allow_builds` is the person's permission to build a
+/// re-hosted application's native modules from source; it is a fact only
+/// when the facts are looked at here.
+pub fn host_facts(context: &Context, allow_builds: bool) -> Result<HostReport, Failure> {
     if let Some(path) = &context.host_file {
         let text = read_input(path, "host-facts")?;
         let facts = parse_host_facts(&text).map_err(|reason| {
@@ -315,6 +342,8 @@ pub fn host_facts(context: &Context) -> Result<HostReport, Failure> {
             arch,
             flatpak: context.flatpak.exists(),
             wine: context.wine.is_file(),
+            rehost: context.tur_rehost.exists(),
+            rehost_builds: allow_builds,
             ..HostFacts::default()
         },
         how: "detected",
@@ -338,7 +367,7 @@ fn preferences(context: &Context) -> Result<Preferences, Failure> {
 }
 
 /// The routes this program installs by.
-pub const BUILT_ROUTES: [Route; 2] = [Route::Flatpak, Route::Wine];
+pub const BUILT_ROUTES: [Route; 3] = [Route::Flatpak, Route::Rehost, Route::Wine];
 
 /// Why a route is not one this program installs by, in a sentence.
 fn not_built(route: Route) -> &'static str {
@@ -358,7 +387,9 @@ fn not_built(route: Route) -> &'static str {
             "Installing a package of another distribution in a container is not built yet."
         }
         Route::Web => "Installing a web application is not built yet.",
-        Route::Flatpak | Route::Wine | Route::NoRoute => "This route is not built.",
+        Route::Flatpak | Route::Rehost | Route::Wine | Route::NoRoute => {
+            "This route is not built."
+        }
     }
 }
 
@@ -374,7 +405,7 @@ pub fn make(context: &Context, request: &Request) -> Result<Plan, Failure> {
             ),
         ));
     };
-    let host = host_facts(context)?;
+    let host = host_facts(context, request.allow_builds)?;
     let preferences = preferences(context)?;
     let options = route(&RouteRequest::new(entry), &host.facts, &preferences);
     let usable = |option: &&RouteOption| option.outlook != tur_catalogue::Outlook::Blocked;
@@ -425,12 +456,18 @@ pub fn make(context: &Context, request: &Request) -> Result<Plan, Failure> {
         .with_detail(serde_json::to_value(&chosen).unwrap_or_default()));
     }
     if !BUILT_ROUTES.contains(&chosen.route) {
-        let built: Vec<&str> = options
+        // A route once, even when two editions offer it (the Windows and
+        // the macOS package, both re-hosted).
+        let mut built: Vec<&str> = Vec::new();
+        for option in options
             .iter()
             .filter(usable)
             .filter(|option| BUILT_ROUTES.contains(&option.route))
-            .map(|option| option.route.as_str())
-            .collect();
+        {
+            if !built.contains(&option.route.as_str()) {
+                built.push(option.route.as_str());
+            }
+        }
         let instead = if built.is_empty() {
             String::new()
         } else {
@@ -456,9 +493,18 @@ pub fn make(context: &Context, request: &Request) -> Result<Plan, Failure> {
             .iter()
             .map(|prerequisite| prerequisite.text.as_str())
             .collect();
+        let how = if chosen
+            .prerequisites
+            .iter()
+            .any(|prerequisite| prerequisite.code == PrerequisiteCode::AllowRehostBuilds)
+        {
+            " To allow the builds, add --allow-builds."
+        } else {
+            ""
+        };
         return Err(Failure::new(
             Code::ProgramMissing,
-            format!("{} Nothing was installed.", needed.join(" ")),
+            format!("{}{how} Nothing was installed.", needed.join(" ")),
         )
         .with_detail(serde_json::to_value(&chosen).unwrap_or_default()));
     }
@@ -486,6 +532,7 @@ pub fn make(context: &Context, request: &Request) -> Result<Plan, Failure> {
     };
     match base.chosen.route {
         Route::Flatpak => flatpak_plan(context, request, entry, edition, base),
+        Route::Rehost => rehost_plan(context, request, entry, edition, base),
         _ => windows_plan(context, request, entry, edition, base),
     }
 }
@@ -1003,6 +1050,382 @@ fn windows_access() -> Vec<Access> {
             "display",
             "x11",
             "It draws its windows through X11, which lets it see other X11 windows and keystrokes.",
+        ),
+    ]
+}
+
+/// The code a refusal by `tur-rehost plan` is reported with, from its exit
+/// status (1 an input, 3 not re-hostable, 4 something must be allowed or
+/// installed, 6 refused) and its blockers' codes.
+fn rehost_refusal(status: Option<i32>, codes: &[&str]) -> Code {
+    match status {
+        Some(1) => Code::InputInvalid,
+        Some(4) => Code::ProgramMissing,
+        Some(6) if codes.contains(&"TUR-REHOST-APP-002") => Code::AlreadyInstalled,
+        Some(3 | 6) => Code::NotVerified,
+        _ => Code::StepFailed,
+    }
+}
+
+/// The plan for the re-hosted route: the person's own Windows or macOS
+/// package, laid by `tur-rehost` under the Linux build of its portable
+/// runtime. TUR never downloads the package; it downloads only the runtime
+/// (and native modules), as `tur-rehost` says from TUR's pinned index.
+fn rehost_plan(
+    context: &Context,
+    request: &Request,
+    entry: &Entry,
+    edition: &Edition,
+    base: Base,
+) -> Result<Plan, Failure> {
+    let dirs = &context.dirs;
+    let Some(evidence) = rehost_evidence(edition) else {
+        return Err(Failure::new(
+            Code::RouteNotBuilt,
+            "the router's re-hosted option names an edition that TUR has not measured",
+        ));
+    };
+    let measurement = edition.records.iter().find(|record| {
+        record.route == Route::Rehost && record.rehost.as_ref() == Some(evidence)
+    });
+    context.tur_rehost.require(
+        "to run the Windows or macOS package of an application on Linux's own build of its runtime",
+    )?;
+    // The package is the publisher's, proprietary or not pinned: TUR never
+    // downloads it, and the person's own file is required.
+    let Some(path) = &request.installer else {
+        return Err(installer_needed(entry, edition));
+    };
+    let hashed = hash_file(path)?;
+    let measured =
+        hashed.sha256 == evidence.package_sha256 && hashed.size == evidence.package_size;
+    let platform = edition.kind.label();
+    let app_id = entry.id.clone();
+    // The modules the measurement showed it starts without are allowed for
+    // the package TUR measured, and for no other file.
+    let options = RehostOptions {
+        allow_builds: request.allow_builds,
+        allow_unresolved: if measured {
+            evidence.unresolved.clone()
+        } else {
+            Vec::new()
+        },
+    };
+    let not_measured = if measured {
+        String::new()
+    } else {
+        format!(
+            "This file is not the package TUR measured ({}), so TUR has not tested it. ",
+            evidence.package
+        )
+    };
+
+    // What tur-rehost says about this file: whether it can be re-hosted, and
+    // the exact downloads from TUR's pinned index.
+    let report = if request.offline {
+        None
+    } else {
+        let outcome = context
+            .tur_rehost
+            .run(&rehost::plan_arguments(path, &app_id, &options))?;
+        match rehost::parse_plan(&outcome.stdout) {
+            Some(report) if report.ready && outcome.success() => Some(report),
+            Some(report) => {
+                let codes: Vec<&str> = report
+                    .blockers
+                    .iter()
+                    .map(|blocker| blocker.code.as_str())
+                    .collect();
+                let why: Vec<String> = report
+                    .blockers
+                    .iter()
+                    .map(|blocker| format!("{} ({})", blocker.message, blocker.code))
+                    .collect();
+                let allow = if !request.allow_builds && codes.contains(&"TUR-REHOST-NATIVE-002")
+                {
+                    " To allow the builds, add --allow-builds."
+                } else {
+                    ""
+                };
+                return Err(Failure::new(
+                    rehost_refusal(outcome.status, &codes),
+                    format!(
+                        "tur-rehost cannot re-host {} from {}: {}.{allow} {not_measured}Nothing was installed.",
+                        entry.name,
+                        path.display(),
+                        if why.is_empty() {
+                            outcome.tail()
+                        } else {
+                            why.join("; ")
+                        }
+                    ),
+                )
+                .with_detail(serde_json::from_str(outcome.stdout.trim()).unwrap_or_default()));
+            }
+            None => {
+                let why = rehost::parse_failure(&outcome.stdout).unwrap_or_else(|| outcome.tail());
+                return Err(Failure::new(
+                    rehost_refusal(outcome.status, &[]),
+                    format!(
+                        "tur-rehost could not make a plan for {} ({why}). Nothing was installed.",
+                        path.display()
+                    ),
+                ));
+            }
+        }
+    };
+
+    let planned_runtime = report.as_ref().and_then(|report| report.runtime.as_ref());
+    let family = planned_runtime
+        .map(|runtime| runtime.family.clone())
+        .filter(|family| !family.is_empty())
+        .unwrap_or_else(|| evidence.runtime.clone());
+    let version = planned_runtime
+        .map(|runtime| runtime.version.clone())
+        .filter(|version| !version.is_empty())
+        .unwrap_or_else(|| evidence.runtime_version.clone());
+    let runtime = rehost::runtime_name(&family);
+    let chromium = matches!(family.as_str(), "electron" | "nwjs");
+
+    let tested = measurement
+        .map(|record| {
+            let with = record
+                .version_tested
+                .as_deref()
+                .map(|tested| format!(" with version {tested}"))
+                .unwrap_or_default();
+            format!(" Tested by TUR on {}{with}: its first window.", record.date)
+        })
+        .unwrap_or_default();
+    let mut notes = vec![format!(
+        "Runs natively through its portable runtime: the {platform} package, on Linux's own build of {runtime} {version}. Not the publisher's Linux version; the publisher does not support it.{tested}"
+    )];
+    if measured && !evidence.unresolved.is_empty() {
+        notes.push(format!(
+            "TUR's measurement showed that it starts without these native modules, which have no Linux build, so tur-rehost is allowed to leave them out; features that need them will not work: {}.",
+            evidence.unresolved.join(", ")
+        ));
+    } else if !measured && !evidence.unresolved.is_empty() {
+        notes.push(format!(
+            "{not_measured}tur-rehost is not allowed to leave out a native module it cannot supply, as it is for the measured package: if one is missing, it refuses."
+        ));
+    } else if !measured {
+        notes.push(not_measured.trim_end().to_owned());
+    }
+    match planned_runtime.map(|runtime| runtime.notice.as_str()) {
+        Some(notice) if !notice.is_empty() => notes.push(notice.to_owned()),
+        _ => notes.push(format!(
+            "{runtime}'s Linux build is downloaded by this computer from the {runtime} project, at your request, and checked against the SHA-256 TUR pinned. It is not part of TUR{}.",
+            if chromium {
+                ", and it includes media codecs (H.264 and AAC) that TUR does not ship"
+            } else {
+                ""
+            }
+        )),
+    }
+    let builds = report
+        .as_ref()
+        .map_or(!evidence.native_builds.is_empty(), |report| {
+            report.needs_build_environment
+        });
+    if builds {
+        notes.push(
+            "As you allowed, some of its native modules are built from source on this computer, without network access, with Fedora's compiler; Fedora's build tools are downloaded once from Fedora.".to_owned(),
+        );
+    }
+    notes.push(format!(
+        "Its own updater is off: it would fetch a {platform} update. To move to a newer version, remove it (its settings and documents are kept) and install the newer package."
+    ));
+    notes.push(
+        "The launcher entry is staged by tur-rehost and not yet added to the launcher.".to_owned(),
+    );
+    if request.offline {
+        notes.push(
+            "Offline plan: tur-rehost did not open the file, so whether it can be re-hosted, and the exact downloads with their sizes and digests, are not known yet. The plan made at installation asks it.".to_owned(),
+        );
+    } else {
+        notes.push(
+            "To make this plan, tur-rehost opened the file in its sandbox, without running anything in it, and read TUR's pinned index.".to_owned(),
+        );
+    }
+
+    let downloads = match &report {
+        Some(report) => report
+            .downloads
+            .iter()
+            .map(|download| Download {
+                what: match &download.licence {
+                    Some(licence) => format!("{} (licence: {licence})", download.what),
+                    None => download.what.clone(),
+                },
+                from: download.url.clone(),
+                size: Some(download.size),
+                installed_size: None,
+                sha256: Some(download.sha256.clone()),
+                commit: None,
+                size_source: "TUR's pinned index, through tur-rehost".to_owned(),
+            })
+            .collect(),
+        None => vec![Download {
+            what: format!(
+                "{runtime} {version} for Linux, the runtime it runs on{}",
+                if measured {
+                    ""
+                } else {
+                    " (the version of the package TUR measured; this file may need another)"
+                }
+            ),
+            from: if family == "electron" {
+                "the Electron project's releases on GitHub".to_owned()
+            } else {
+                format!("the {runtime} project's own releases")
+            },
+            size: None,
+            installed_size: None,
+            sha256: None,
+            commit: None,
+            size_source: "not known: an offline plan does not ask tur-rehost, which reads the size and the digest from TUR's pinned index".to_owned(),
+        }],
+    };
+
+    let verification = if measured {
+        format!(
+            "This is the package TUR measured: {}, {} bytes with SHA-256 {}, the file of the catalogue's record of TUR's test ({}). Nothing in it is run to install it: tur-rehost unpacks it in its sandbox and lays its files under the runtime.",
+            evidence.package, evidence.package_size, evidence.package_sha256, evidence.evidence
+        )
+    } else {
+        format!(
+            "This file was not measured by TUR: its SHA-256 is {}, and the package TUR measured, {}, has {}. It is re-hosted as you gave it and its digest is recorded. Nothing in it is run to install it: tur-rehost unpacks it in its sandbox and lays its files under the runtime.",
+            hashed.sha256, evidence.package, evidence.package_sha256
+        )
+    };
+    let steps = vec![
+        Step {
+            id: "verify",
+            text: format!(
+                "Checked now: {} is {} with SHA-256 {}; {}",
+                path.display(),
+                human_size(hashed.size),
+                hashed.sha256,
+                if measured {
+                    "it is the package TUR measured"
+                } else {
+                    "it is not the package TUR measured"
+                }
+            ),
+            command: Vec::new(),
+        },
+        Step {
+            id: "install",
+            text: format!(
+                "Re-host it with tur-rehost: download {runtime} {version} for Linux and check it against TUR's pinned SHA-256, unpack the package without running anything in it, lay its files under the runtime, and stage its launcher entry"
+            ),
+            command: command(
+                &context.tur_rehost,
+                rehost::install_arguments(path, &app_id, &entry.name, &options),
+            ),
+        },
+        Step {
+            id: "record",
+            text: format!(
+                "Record the installation in {}",
+                display(&dirs.record(&entry.id), dirs)
+            ),
+            command: Vec::new(),
+        },
+    ];
+
+    let home = dirs.rehost_home(&app_id);
+    Ok(Plan {
+        schema_version: PLAN_VERSION,
+        kind: "plan",
+        application: base.application,
+        route: base.chosen.route,
+        chosen_by: base.chosen_by,
+        router: base.chosen,
+        host: base.host,
+        source: PlanSource {
+            kind: "user-file",
+            name: format!("the {platform} package you gave"),
+            remote: None,
+            url: None,
+            file: Some(path.display().to_string()),
+            verification,
+        },
+        downloads,
+        installs: vec![
+            place(
+                "the application, laid under its runtime, with its private home and record",
+                &dirs.rehost_app(&app_id),
+                dirs,
+            ),
+            place(
+                "its launcher entry (staged)",
+                &dirs.rehost_desktop_entry(&app_id),
+                dirs,
+            ),
+        ],
+        access: rehost_access(),
+        access_known: true,
+        removal: Removal {
+            command: format!("tur-apps remove {} [--keep-data | --delete-data]", entry.id),
+            text: format!(
+                "Unless you say to delete them, its settings and documents (its private home) are first copied to {}; then `tur-rehost uninstall` deletes its directory, private home, launcher entry and logs, and checks that nothing is left.",
+                display(&dirs.kept(&entry.id), dirs)
+            ),
+            data: vec![place(
+                "its settings and documents (its private home)",
+                &home,
+                dirs,
+            )],
+            data_kept_by_default: true,
+        },
+        steps,
+        notes,
+        execution: Execution::Rehost {
+            app_id,
+            package: path.clone(),
+            hashed,
+            measured,
+            options,
+        },
+    })
+}
+
+/// What a re-hosted application may reach, from the sandbox `tur-rehost`
+/// starts it in (`services/tur-rehost/src/sandbox.rs`, the application
+/// sandbox).
+fn rehost_access() -> Vec<Access> {
+    let item = |kind: &'static str, permission: &str, text: &str| Access {
+        kind,
+        permission: permission.to_owned(),
+        text: text.to_owned(),
+    };
+    vec![
+        item(
+            "files",
+            "own-directory-and-private-home",
+            "It sees only its own directory, which it cannot change, and a private home. None of your files.",
+        ),
+        item(
+            "network",
+            "shared-network",
+            "It can use the network (tur-rehost shares it: these applications need it).",
+        ),
+        item(
+            "display",
+            "wayland-or-x11",
+            "It draws its windows through Wayland or X11, as its runtime chooses.",
+        ),
+        item(
+            "sound",
+            "sound-server",
+            "It can play and record sound through your session's sound server.",
+        ),
+        item(
+            "services",
+            "accessibility",
+            "Its windows are visible to P@x and to screen readers, as a Linux application's are. It does not see the session's other services or your keyring.",
         ),
     ]
 }

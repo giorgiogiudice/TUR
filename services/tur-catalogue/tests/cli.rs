@@ -129,8 +129,10 @@ fn validate_accepts_the_seed_catalogue() {
         .parse()
         .unwrap();
     assert!(applications >= 25, "{}", outcome.stdout);
+    // TUR's own ratings: the 40 re-hosted packages of
+    // docs/reports/exp-rehost-1.md.
     assert!(
-        outcome.stdout.contains("0 rated by TUR tests"),
+        outcome.stdout.contains("40 rated by TUR tests"),
         "{}",
         outcome.stdout
     );
@@ -151,7 +153,7 @@ fn validate_accepts_the_seed_catalogue() {
         report["statistics"]["applications"].as_u64(),
         Some(applications as u64)
     );
-    assert_eq!(report["statistics"]["rated_by_tur_tests"], 0);
+    assert_eq!(report["statistics"]["rated_by_tur_tests"], 40);
 }
 
 #[test]

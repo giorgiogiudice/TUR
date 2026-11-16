@@ -26,7 +26,7 @@ use crate::codes::{Code, Problem};
 use crate::date::{Date, MIN_YEAR};
 use crate::model::{
     AndroidStore, Edition, EditionKind, Entry, EntryKind, Obtain, Rating, Record, Reference,
-    Reporter, Route, SCHEMA_VERSION,
+    RehostEvidence, Reporter, Route, SCHEMA_VERSION,
 };
 use crate::search::normalise;
 use crate::url::{check_https_url, is_direct_download};
@@ -646,6 +646,121 @@ fn is_sha256(text: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// The most native modules a re-hosting record may list, in each list.
+pub const MAX_REHOST_MODULES: usize = 64;
+
+/// The longest name of a native module with its version, in bytes: npm's
+/// limit on a package name.
+const MAX_MODULE_BYTES: usize = 214;
+
+/// Whether `text` is a plain file name: no directory, no control character,
+/// no surrounding space, at most 255 bytes.
+fn is_plain_file_name(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 255
+        && text.trim() == text
+        && text != "."
+        && text != ".."
+        && !text.contains(['/', '\\'])
+        && !text.chars().any(char::is_control)
+}
+
+/// Whether `text` is the version of a runtime as re-hosting records it:
+/// digits, letters, `.`, `-` and `+`, at most 64 bytes.
+fn is_runtime_version(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 64
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+'))
+}
+
+/// Whether `text` names a native module and its version, `name@version`,
+/// where the name may be scoped (`@scope/name@version`).
+fn is_module_version(text: &str) -> bool {
+    if text.is_empty() || text.len() > MAX_MODULE_BYTES {
+        return false;
+    }
+    let Some((name, version)) = text.rsplit_once('@') else {
+        return false;
+    };
+    let name_part = |part: &str| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~'))
+    };
+    let name_valid = match name.strip_prefix('@') {
+        Some(scoped) => scoped
+            .split_once('/')
+            .is_some_and(|(scope, bare)| name_part(scope) && name_part(bare)),
+        None => name_part(name),
+    };
+    name_valid && is_runtime_version(version)
+}
+
+/// Whether `text` names, as `file:<file name>`, a native module whose
+/// package cannot be identified, such as `file:node.napi.node`: the file
+/// name is a plain base name that ends in `.node`.
+fn is_module_file(text: &str) -> bool {
+    text.strip_prefix("file:").is_some_and(|name| {
+        is_plain_file_name(name) && name.len() > ".node".len() && name.ends_with(".node")
+    })
+}
+
+/// Checks the evidence of a re-hosting record.
+fn check_rehost(findings: &mut Findings, what: &str, evidence: &RehostEvidence) {
+    let what = format!("{what}: rehost");
+    if !is_plain_file_name(&evidence.package) {
+        findings.invalid(format!(
+            "{what}: package \"{}\" is not the name of a file, without a directory",
+            printable(&evidence.package)
+        ));
+    }
+    if !is_sha256(&evidence.package_sha256) {
+        findings.invalid(format!(
+            "{what}: package_sha256 is not 64 lower-case hexadecimal digits"
+        ));
+    }
+    if evidence.package_size == 0 {
+        findings.invalid(format!("{what}: package_size is zero"));
+    }
+    if !RehostEvidence::RUNTIMES.contains(&evidence.runtime.as_str()) {
+        findings.invalid(format!(
+            "{what}: runtime \"{}\" is not one TUR re-hosts on; known: {}",
+            printable(&evidence.runtime),
+            RehostEvidence::RUNTIMES.join(", ")
+        ));
+    }
+    if !is_runtime_version(&evidence.runtime_version) {
+        findings.invalid(format!(
+            "{what}: runtime_version \"{}\" is not a version such as 43.7.7",
+            printable(&evidence.runtime_version)
+        ));
+    }
+    check_url(findings, &format!("{what}: evidence"), &evidence.evidence);
+    for (field, list, files_allowed) in [
+        ("native_builds", &evidence.native_builds, false),
+        ("unresolved", &evidence.unresolved, true),
+    ] {
+        if list.len() > MAX_REHOST_MODULES {
+            findings.add(
+                Code::LimitExceeded,
+                format!("{what}: {field} lists more than {MAX_REHOST_MODULES} modules"),
+            );
+        }
+        for item in list {
+            let valid = is_module_version(item) || (files_allowed && is_module_file(item));
+            if !valid {
+                findings.invalid(format!(
+                    "{what}: {field} item \"{}\" is not a module and its version, such as @parcel/watcher@2.5.6",
+                    printable(item)
+                ));
+            }
+        }
+    }
+}
+
 /// Checks one compatibility record, including the honesty rule.
 fn check_record(
     findings: &mut Findings,
@@ -654,6 +769,27 @@ fn check_record(
     record: &Record,
     today: Date,
 ) {
+    match (&record.rehost, record.route == Route::Rehost) {
+        (Some(evidence), true) => check_rehost(findings, what, evidence),
+        (None, true) => findings.invalid(format!(
+            "{what}: a record of the rehost route carries its rehost table: the package measured, its digest and size, the runtime and the evidence"
+        )),
+        (Some(_), false) => findings.invalid(format!(
+            "{what}: a rehost table belongs to a record of the rehost route only"
+        )),
+        (None, false) => {}
+    }
+    if record.route == Route::Rehost
+        && record.reported_by == Reporter::External
+        && record.rating != Rating::Unknown
+    {
+        findings.add(
+            Code::UnsourcedRating,
+            format!(
+                "{what}: only TUR's own test can rate the rehost route: an external source cannot have measured TUR's re-host"
+            ),
+        );
+    }
     if record.reported_by != Reporter::TurAutopilot
         && (!record.remedies.is_empty()
             || record.runtime_version.is_some()
@@ -1108,6 +1244,7 @@ mod tests {
             remedies: Vec::new(),
             runtime_version: None,
             evidence_sha256: None,
+            rehost: None,
         }
     }
 
@@ -1126,6 +1263,7 @@ mod tests {
             remedies: Vec::new(),
             runtime_version: None,
             evidence_sha256: None,
+            rehost: None,
         }
     }
 
@@ -1144,6 +1282,7 @@ mod tests {
             remedies: Vec::new(),
             runtime_version: None,
             evidence_sha256: None,
+            rehost: None,
         }
     }
 
@@ -1186,6 +1325,7 @@ mod tests {
             ],
             runtime_version: Some("wine-9.0".to_owned()),
             evidence_sha256: Some("ab".repeat(32)),
+            rehost: None,
         }
     }
 
@@ -1227,6 +1367,157 @@ mod tests {
         assert!(is_remedy_label("dll-builtin:d3dx9_43"));
         assert!(!is_remedy_label("dll-builtin:"));
         assert!(!is_remedy_label("Dpi"));
+    }
+
+    fn evidence() -> RehostEvidence {
+        RehostEvidence {
+            package: "Example-1.2-win-x64.zip".to_owned(),
+            package_sha256: "ab".repeat(32),
+            package_size: 231_406_156,
+            runtime: "electron".to_owned(),
+            runtime_version: "43.7.7".to_owned(),
+            evidence: "https://github.com/example/example/actions/runs/1".to_owned(),
+            native_builds: vec![
+                "@parcel/watcher@2.5.6".to_owned(),
+                "@vscode/sqlite3@5.1.12-vscode".to_owned(),
+            ],
+            unresolved: vec!["microsoft-authentication@0.0.1".to_owned()],
+        }
+    }
+
+    /// The evidence with one field set to `value`.
+    fn with_field(field: &str, value: &str) -> RehostEvidence {
+        let mut evidence = evidence();
+        match field {
+            "package" => evidence.package = value.to_owned(),
+            "package_sha256" => evidence.package_sha256 = value.to_owned(),
+            "package_size" => evidence.package_size = value.parse().unwrap(),
+            "runtime" => evidence.runtime = value.to_owned(),
+            "runtime_version" => evidence.runtime_version = value.to_owned(),
+            "evidence" => evidence.evidence = value.to_owned(),
+            "native_builds" => evidence.native_builds = vec![value.to_owned()],
+            "unresolved" => evidence.unresolved = vec![value.to_owned()],
+            other => panic!("no field {other}"),
+        }
+        evidence
+    }
+
+    fn rehosted(rating: Rating) -> Record {
+        let mut record = tur_test(Route::Rehost, rating);
+        record.rehost = Some(evidence());
+        record
+    }
+
+    #[test]
+    fn a_rehost_record_carries_its_evidence_and_only_it_does() {
+        assert_eq!(codes(&with_record(rehosted(Rating::Usable))), NONE);
+        let mut mac = Edition::new(EditionKind::Macos);
+        mac.obtain = Some(Obtain::PublisherPage);
+        mac.download_page = Some("https://example.org/mac".to_owned());
+        mac.records.push(rehosted(Rating::Good));
+        assert_eq!(codes(&entry(vec![mac])), NONE);
+
+        // Without its table, refused.
+        let mut bare = rehosted(Rating::Usable);
+        bare.rehost = None;
+        let text = messages(&with_record(bare.clone()));
+        assert_eq!(codes(&with_record(bare)), [Code::EntryInvalid]);
+        assert!(text.contains("rehost table"), "{text}");
+
+        // On another route, refused.
+        let mut misplaced = tur_test(Route::Wine, Rating::Good);
+        misplaced.rehost = Some(evidence());
+        assert_eq!(codes(&with_record(misplaced)), [Code::EntryInvalid]);
+
+        // Not a route of a Linux edition.
+        let mut linux = flatpak();
+        linux.records.push(rehosted(Rating::Usable));
+        assert_eq!(codes(&entry(vec![linux])), [Code::RouteMismatch]);
+    }
+
+    #[test]
+    fn only_tur_s_own_test_rates_a_re_host() {
+        for rating in [Rating::Good, Rating::Usable, Rating::Poor, Rating::Broken] {
+            let mut record = external(Route::Rehost, rating);
+            record.rehost = Some(evidence());
+            assert_eq!(
+                codes(&with_record(record)),
+                [Code::UnsourcedRating],
+                "{}",
+                rating.as_str()
+            );
+        }
+        let mut unknown = external(Route::Rehost, Rating::Unknown);
+        unknown.source_rating = None;
+        unknown.rehost = Some(evidence());
+        assert_eq!(codes(&with_record(unknown)), NONE);
+        assert_eq!(codes(&with_record(rehosted(Rating::Broken))), NONE);
+    }
+
+    #[test]
+    fn the_evidence_of_a_re_host_is_checked() {
+        let cases: Vec<(&str, String)> = vec![
+            ("package", "dist/Example.zip".to_owned()),
+            ("package", "dist\\Example.zip".to_owned()),
+            ("package", String::new()),
+            ("package", "x".repeat(256)),
+            ("package", "Exa\u{7}mple.zip".to_owned()),
+            ("package_sha256", "AB".repeat(32)),
+            ("package_sha256", "ab".to_owned()),
+            ("package_size", "0".to_owned()),
+            ("runtime", "wine".to_owned()),
+            ("runtime", "Electron".to_owned()),
+            ("runtime_version", "43 7".to_owned()),
+            ("runtime_version", String::new()),
+            ("runtime_version", "1".repeat(65)),
+            ("evidence", "http://example.org/run".to_owned()),
+            ("native_builds", "watcher".to_owned()),
+            ("native_builds", "@parcel@2.5.6".to_owned()),
+            ("native_builds", "a/b@1.0".to_owned()),
+            ("native_builds", "file:node.napi.node".to_owned()),
+            ("unresolved", "fsevents@".to_owned()),
+            ("unresolved", "(no package.json) x.node".to_owned()),
+            ("unresolved", "node.napi.node".to_owned()),
+            ("unresolved", "file:build/node.napi.node".to_owned()),
+            ("unresolved", "file:node.napi.dll".to_owned()),
+            ("unresolved", "file:.node".to_owned()),
+        ];
+        for (field, value) in cases {
+            let mut record = rehosted(Rating::Usable);
+            record.rehost = Some(with_field(field, &value));
+            let entry = with_record(record);
+            let text = messages(&entry);
+            assert_eq!(codes(&entry), [Code::EntryInvalid], "{field}: {text}");
+            assert!(text.contains(field), "{field}: {text}");
+        }
+
+        // What is accepted.
+        for runtime in RehostEvidence::RUNTIMES {
+            let mut record = rehosted(Rating::Usable);
+            let mut good = evidence();
+            good.runtime = runtime.to_owned();
+            good.runtime_version = "8.0.11+abc-1".to_owned();
+            good.native_builds = Vec::new();
+            good.unresolved = vec![
+                "fsevents@2.3.3".to_owned(),
+                "file:node.napi.node".to_owned(),
+            ];
+            record.rehost = Some(good);
+            assert_eq!(codes(&with_record(record)), NONE, "{runtime}");
+        }
+        assert!(is_module_version("@vscodium/native-keymap@3.3.9-260952"));
+        assert!(is_module_version("ced@2.0.0"));
+        assert!(!is_module_version("@scope@1.0"));
+        assert!(!is_module_version(&format!("{}@1.0", "a".repeat(214))));
+
+        // At most 64 modules in each list.
+        let mut record = rehosted(Rating::Usable);
+        let mut long = evidence();
+        long.native_builds = (0..=MAX_REHOST_MODULES)
+            .map(|number| format!("module-{number}@1.0.0"))
+            .collect();
+        record.rehost = Some(long);
+        assert_eq!(codes(&with_record(record)), [Code::LimitExceeded]);
     }
 
     #[test]

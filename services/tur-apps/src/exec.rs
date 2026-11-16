@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
-//! Running the programs this component drives: `flatpak`, `curl` and
-//! `tur-runtime`.
+//! Running the programs this component drives: `flatpak`, `curl`,
+//! `tur-runtime` and `tur-rehost`.
 //!
 //! A program is always started by its absolute path with an argument list,
 //! never through a shell, so no argument is ever interpreted. Every program
