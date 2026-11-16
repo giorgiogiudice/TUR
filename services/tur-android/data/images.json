@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "lineage-20.0-20260927-VANILLA-20261022-MAINLINE",
+  "android_version": "13",
+  "api_level": 33,
+  "description": "LineageOS 20 as built by the Waydroid project, the VANILLA variant without Google software",
+  "source": "https://ota.waydro.id/system/lineage/waydroid_x86_64/VANILLA.json and https://ota.waydro.id/vendor/waydroid_x86_64/MAINLINE.json, read on 14 November 2026",
+  "licence": "the images are binaries built by the Waydroid project from LineageOS and the Android Open Source Project, which are mostly under the Apache License 2.0 with parts under the GPL (the Linux user space and some tools); TUR has not audited them and does not redistribute them.",
+  "memory_measured": "About 0.94 GB while the Android system runs, and 35 to 317 MiB more for each open application (median 102 MiB), measured with the same kernel and Waydroid package in a virtual machine (TUR experiment exp-android-1, run 43553105465).",
+  "images": [
+    {
+      "name": "system",
+      "file": "lineage-20.0-20260927-VANILLA-waydroid_x86_64-system.zip",
+      "url": "https://sourceforge.net/projects/waydroid/files/images/system/lineage/waydroid_x86_64/lineage-20.0-20260927-VANILLA-waydroid_x86_64-system.zip/download",
+      "sha256": "053552725bf4ae25e2d3f7e6f1947203294aa9d73dc17fe1f3abe646e5d3bd8a",
+      "size": 847449341,
+      "member": "system.img",
+      "unpacked_size": 1827717120
+    },
+    {
+      "name": "vendor",
+      "file": "lineage-20.0-20261022-MAINLINE-waydroid_x86_64-vendor.zip",
+      "url": "https://sourceforge.net/projects/waydroid/files/images/vendor/waydroid_x86_64/lineage-20.0-20261022-MAINLINE-waydroid_x86_64-vendor.zip/download",
+      "sha256": "91663c337013145208b6c533d7e1fa2a915a9864ddc8fc56966f40cd759648ac",
+      "size": 189818691,
+      "member": "vendor.img",
+      "unpacked_size": 562388992
+    }
+  ]
+}

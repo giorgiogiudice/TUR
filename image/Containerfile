@@ -46,6 +46,7 @@ COPY catalogue/ /src/catalogue/
 COPY crates/ /src/crates/
 COPY installer/tur-installer-core/ /src/installer/tur-installer-core/
 COPY services/tur-ai-local/ /src/services/tur-ai-local/
+COPY services/tur-android/ /src/services/tur-android/
 COPY services/tur-apps/ /src/services/tur-apps/
 COPY services/tur-boot-health/ /src/services/tur-boot-health/
 COPY services/tur-catalogue/ /src/services/tur-catalogue/
@@ -180,6 +181,17 @@ RUN set -eu; \
 # with rootfs/ above.
 RUN --mount=type=bind,source=image/signing,target=/run/tur-signing \
     python3 -I -B /run/tur-signing/policy.py /usr/share/containers/policy.json
+
+# The Android runtime (ADR-0006; docs/architecture/android-runtime.md, sections
+# 3.2 and 8.3): Fedora's Waydroid package and its SELinux module, pinned by
+# version in image/android/packages.lock, from the Fedora 45 release tree. No
+# Android image: the person's computer fetches the pinned images when the
+# person switches Android on (tur-android enable). The container service
+# cannot start until then: its drop-in (image/rootfs) makes it wait for TUR's
+# flag. Waydroid's own launcher entries are hidden; image/android/waydroid.sh
+# says why.
+RUN --mount=type=bind,source=image/android,target=/run/tur-android \
+    /bin/bash /run/tur-android/waydroid.sh /run/tur-android/packages.lock
 
 # Fedora's marks replaced (desktop-experience.md, section 12; image/README.md,
 # "Fedora's marks"): Fedora's release and logo packages swapped for Fedora's

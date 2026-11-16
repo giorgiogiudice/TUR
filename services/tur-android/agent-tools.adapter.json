@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Android1",
+  "adapters": [
+    {
+      "tool": "android_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        {
+          "literal": "status"
+        },
+        {
+          "literal": "--json"
+        }
+      ]
+    },
+    {
+      "tool": "android_explain",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        {
+          "literal": "explain"
+        },
+        {
+          "literal": "--json"
+        }
+      ]
+    },
+    {
+      "tool": "android_list_apps",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        {
+          "literal": "list"
+        },
+        {
+          "literal": "--json"
+        }
+      ]
+    }
+  ]
+}

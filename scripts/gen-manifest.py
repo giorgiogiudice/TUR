@@ -36,6 +36,8 @@ PACKAGES = [
     "bubblewrap",
     # what TUR's own programs start
     "util-linux", "pciutils", "usbutils", "vulkan-tools", "python3", "sudo",
+    # the Android runtime (ADR-0006), off until the person switches it on
+    "waydroid", "waydroid-selinux", "lxc", "python3-gbinder", "libgbinder", "dnsmasq",
 ]
 
 PROBE = r"""

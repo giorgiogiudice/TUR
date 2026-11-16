@@ -1,0 +1,194 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The Android runtime (ADR-0006; docs/architecture/android-runtime.md;
+# docs/reports/android-1.md): build the image, install it to a disk, prepare
+# the disk with the boot test's first two boots, then boot it once more,
+# sign the test user in to Plasma, and let the guest's android-agent switch
+# Android on with tur-android, install an open-source APK pinned by SHA-256,
+# start it as a window, remove it and switch Android off; the host takes the
+# screenshots and judges (tests/boot/android.py). SELinux stays enforcing.
+#
+# The Android images are the pinned VANILLA images (no Google software),
+# fetched from their publisher on the runner, checked against their digests,
+# cached, and offered to the guest as a mirror; tur-android checks every
+# digest again. Nothing here is shipped.
+name: android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/tur-android/**"
+      - "image/android/**"
+      - "image/rootfs/usr/lib/systemd/system/waydroid-container.service.d/**"
+      - "image/rootfs/usr/lib/firewalld/**"
+      - "tests/boot/android.py"
+      - "tests/boot/guest/rootfs/usr/libexec/tur-boot-test/android-agent"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "services/tur-android/**"
+      - "image/android/**"
+      - "image/rootfs/usr/lib/systemd/system/waydroid-container.service.d/**"
+      - "image/rootfs/usr/lib/firewalld/**"
+      - "tests/boot/android.py"
+      - "tests/boot/guest/rootfs/usr/libexec/tur-boot-test/android-agent"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  IMAGE: localhost/tur:ci
+  OUT: out/android
+  PREPARE: out/android/prepare
+  CACHE: android-cache
+
+jobs:
+  lint:
+    name: Lint the Android test scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Lint
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x --severity=warning tests/boot/guest/rootfs/usr/libexec/tur-boot-test/android-agent \
+            image/android/waydroid.sh
+          python3 -m py_compile tests/boot/android.py
+          python3 -c 'import json; json.load(open("services/tur-android/data/images.json"))'
+
+  android:
+    name: Android on a booted TUR, switched on and off
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          mkdir -p "$PREPARE/host"
+
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$PREPARE/host/kvm.json"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-boot"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-boot
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-boot
+              work=/mnt/tur-boot
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU, UEFI firmware and zstd
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf zstd
+          qemu-system-x86_64 --version | head -1
+
+      # The pinned Android images (about 1 GB) and the test's APK, kept
+      # between runs: the key is the pins themselves.
+      - name: Android images and the test APK, from the cache
+        id: cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.CACHE }}
+          key: android-${{ hashFiles('services/tur-android/data/images.json', 'tests/boot/android.py') }}
+
+      - name: Fetch them from their publishers if they are not cached
+        run: python3 tests/boot/android.py fetch "$CACHE" && ls -l "$CACHE"
+
+      - name: Keep them in the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.CACHE }}
+          key: android-${{ hashFiles('services/tur-android/data/images.json', 'tests/boot/android.py') }}
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          scripts/build-image.sh "$IMAGE" --ignorefile image/Containerfile.containerignore
+          echo "image build: $(( $(date +%s) - start )) s"
+          sudo podman image inspect -f 'image size: {{.Size}} bytes' "$IMAGE"
+
+      # Room for Android: about 1 GB of archives and 2.4 GB of images while
+      # switching on. The disk is sparse.
+      - name: Build the boot-test image and install it to a disk
+        env:
+          TUR_BOOT_DISK_SIZE: 40G
+        run: tests/boot/build-disk.sh "$IMAGE" "$WORK" "$PREPARE"
+
+      - name: Prepare the disk (two boots)
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$PREPARE" --timeout 900 --prepare-only
+
+      - name: Switch Android on, run an application, switch it off
+        run: python3 tests/boot/android.py run --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --cache "$CACHE" --timeout 3600
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$PREPARE/host/vm-result.json"
+          show "$OUT/guest/android/facts.txt"
+          show "$OUT/guest/android/exit-status.tsv"
+          for f in enable install launch disable; do
+            show "$OUT/guest/android/$f.json" 80
+            show "$OUT/guest/android/$f.json.err" 40
+          done
+          show "$OUT/guest/android/journal-waydroid.txt" 80
+          show "$OUT/guest/android/avc.txt" 40
+          show "$OUT/host/qemu.log" 40
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-android
+          path: |
+            out/android/
+            !out/android/**/*.ppm.tmp
+          if-no-files-found: warn

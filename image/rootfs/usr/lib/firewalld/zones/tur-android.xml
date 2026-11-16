@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  The Android container's bridge (ADR-0006; android-runtime.md, sections 7.5
+  and 10.2; the owner's decision of 15 November 2026). The distribution's
+  Waydroid package puts waydroid0 in the "trusted" zone, which lets Android reach
+  every service of the host. Binding the interface here first means that
+  Waydroid's own "firewall-cmd -/-zone=trusted -/-add-interface" fails (the
+  interface is already in a zone), and this zone applies instead.
+
+  Towards the host, Android may only ask for an address (DHCP) and resolve
+  names (DNS), both answered by Waydroid's dnsmasq on the bridge. Everything
+  else addressed to the host is rejected: the zone's default target. Traffic
+  to other networks is decided by the policy tur-android-out.
+-->
+<zone>
+  <short>TUR Android</short>
+  <description>The Android container: DHCP and DNS from the host, nothing else of the host.</description>
+  <interface name="waydroid0"/>
+  <service name="dhcp"/>
+  <service name="dns"/>
+</zone>

@@ -54,6 +54,10 @@ fi
 if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/heal/raw ]; then
     exec /usr/libexec/tur-boot-test/heal-agent
 fi
+# The Android runtime test of the android workflow (tests/boot/android.py).
+if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/android/raw ]; then
+    exec /usr/libexec/tur-boot-test/android-agent
+fi
 
 # The scenario jobs only need the disk prepared: a user, first-run setup
 # done. They ask for the run to end after the second boot (run-vm.py
