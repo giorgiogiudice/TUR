@@ -14,6 +14,7 @@ mkdir -p "${work}"
 
 snapshot() { # snapshot LABEL: the Wine and sandbox processes, as a tree
     echo "== processes ($1, $(date -u +%T))"
+    # shellcheck disable=SC2009  # the whole tree, with states and wait channels, which pgrep does not show
     ps -o pid,ppid,etimes,stat,wchan:20,args -u "$(id -u)" --forest | grep -v -E ' (ps|grep) ' | grep -i -E 'wine|bwrap|tur-runtime|\.exe|PID' | cut -c1-220
 }
 

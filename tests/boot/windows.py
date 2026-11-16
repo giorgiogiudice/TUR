@@ -262,7 +262,7 @@ def boot(work: pathlib.Path, out_root: pathlib.Path, seconds: int, only: str | N
     fw_cfg = {"windows-check/only": only} if only else {}
     machine = splash.DirectMachine(
         kernel=src / "vmlinuz", initrd=src / "initramfs.img", append=append,
-        disk=str(work / "disk.raw"), work=work, name="tur-windows", cpus=4, memory=8192,
+        disk=str(work / "disk.raw"), work=work, name="tur-windows", cpus=4, memory=6144,
         serial_log=out / "serial.log", report_tar=work / "windows-report.tar", qemu_log=out / "qemu.log",
         variables_from=str(variables) if variables.exists() else None, fw_cfg=fw_cfg,
     )

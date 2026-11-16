@@ -44,7 +44,7 @@ Fedora's `wine.spec` on the f45 branch:
 | Updates repository | Keeps only the newest build: 18 of the 82 pinned files were already gone from it a day later (HTTP 404), and were fetched from Koji's signed copy, which matched the pinned SHA-256 |
 
 **Decision: in the image, as Fedora's packages, pinned.** Measured in
-section 3: +1.92 GB uncompressed (+24 %), about 0.3 GB more to download.
+section 3: +1.92 GB uncompressed (+24 %), +0.45 GB compressed (+13 %).
 
 - *In the image, not a system extension or an on-demand install.* Running
   Windows applications is one of the three things TUR is for, and "it just
@@ -110,9 +110,10 @@ commit d424be7; main has changed only in TUR's own programs since):
 | of which `/usr/lib64/wine-wow64` (Wine's DLLs and libraries) | | 1 553 443 042 B | |
 | of which `/usr/share/wine` (fonts, NLS, winmd) | | 47 211 321 B | |
 | RPM packages in the image | 1 743 | 1 826 | +83 |
-| Packages to download for Wine (compressed RPMs; the image layer is of the same order) | | 298 881 745 B | |
-| Image build, first build (`Build image` step) | 532 s and 1 402 s (two main runs; the runners vary) | 1 489 s | about +1 to +15 min |
-| Image build, second build without cache (reproducibility) | 432 s and 1 296 s | 1 411 s | |
+| Packages to download for Wine (compressed RPMs) | | 298 881 745 B | |
+| **The image as published, compressed** (OCI archive, zstd: the `tur-image-oci` artifact, runs 43545811883 and 43774627368) | 3 515 503 207 B | 3 970 391 655 B | **+454 888 448 B (+12.9 %)** |
+| Image build, first build (`Build image` step) | 532 s and 1 402 s (two main runs; the runners vary) | 1 489 s and 1 739 s (two runs) | about +5 to +20 min |
+| Image build, second build without cache (reproducibility) | 432 s and 1 296 s | 1 411 s and 1 680 s | |
 | Reproducible (two builds, same image ID) | yes | **yes** (`2eb3a887…`) | |
 
 The 1.5 GB of Wine's DLLs is Fedora's build: its PE DLLs keep their
