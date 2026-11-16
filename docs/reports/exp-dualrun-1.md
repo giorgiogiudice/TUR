@@ -2,9 +2,10 @@
 # exp-dualrun-1 — the person's own Windows, started inside TUR from its real partitions (experiment)
 
 > **Status (16 November 2026, second engineer): the synthetic tests pass,
-> 30 of 30 (runs 43757600470 and 43764669843); the licence terms were read
-> and do not plainly permit the experiment on a hosted runner, so the
-> experiment stage was NOT dispatched.** Pull request 131. The hypotheses
+> 31 of 31 (run 43769505329); the licence terms were read and did not
+> plainly permit the experiment on a hosted runner; the owner, as
+> licensee, decided on 16 November 2026 to run it on GitHub without Remote
+> Desktop (section 2.1), and the experiment stage was dispatched.** Pull request 131. The hypotheses
 > were committed first (`01d0df6`), before any run. The first synthetic run
 > (43554037179, on `65a6280`) passed 9 of 30: a harness bug (ntfs-3g mounts
 > a volume that looks hibernated read-only, without failing) left a
@@ -54,13 +55,12 @@ BUILD
 - Warnings: none
 
 TESTS
-- Unit tests: the synthetic job, no Microsoft software: **30 of 30 pass**
-  (run 43764669843 on `81fea51`; also 43757600470 on `4aea64d`); a 31st
-  case (dropped writes counted and reported, section 3.2.1) was added
-  after them: its result is in the hand-back and section 5.0
-- Integration tests: NOT RUN (stage `experiment` not dispatched: the
-  evaluation's terms do not plainly permit it on a hosted runner, section
-  2.1; owner's decision 1)
+- Unit tests: the synthetic job, no Microsoft software: **31 of 31 pass**
+  (run 43769505329 on `39de56d`; 30 of 30 in 43764669843 and 43757600470
+  before the dropped-write case); section 5.0
+- Integration tests: stage `experiment` dispatched after the owner's
+  decision of 16 November 2026 (section 2.1), without `remoteapp`; results
+  in section 5
 - Boot tests: NOT RUN (nothing here changes TUR's boot)
 - Hardware tests: NOT RUN (no hardware runner; the owner's PC procedure is
   section 10)
@@ -552,6 +552,22 @@ What would make it plain, in the order this report would choose:
    kill criterion: `inwin` measures it there (section 7.2; its first pass
    was void).
 
+**The owner's decision, 16 November 2026** (relayed by the lead): **"I
+accept, run on GitHub."** He was shown paragraphs 2(a), 2(b), 2(c)(v),
+2(d)(v), 4(b), 5 and 14.d(ii) as quoted above, and as the licensee he
+accepts the reading that GitHub's hosted runners may be used for
+evaluation and testing of the Windows 11 Enterprise evaluation, **without
+the Remote Desktop part**: scenario `remoteapp` is left out (the workflow
+input `exclude` defaults to `remoteapp`, and `ci/experiment.py` records it
+as "excluded: no Remote Desktop (the owner's licence decision of 16
+November 2026)"). Everything else of the registration holds: no product
+key, no activation, timer or Setup check touched, no route to the
+Internet, and nothing of Microsoft's leaves the runner (`ci/artifact-guard.py`).
+This is the owner's decision as licensee, not a legal opinion: **the
+question stays on the lawyer's list** (section 11, question 5). The
+experiment stage was dispatched after this decision; the run is named in
+section 5.
+
 ## 3. The safety design
 
 ### 3.1 The check-list
@@ -902,7 +918,7 @@ test volumes built with ntfs-3g.
 | 43753949520 | `af43322` | 29 of 30 | A launcher bug: with the hidden ranges as `flakey … error_writes`, the kept session's `qemu-img commit` into the view ended in `Block job failed: Input/output error`. Changed in `4aea64d`: hidden ranges are a `zero` target; the test now flushes the whole view |
 | 43757600470 | `4aea64d` | **30 of 30** | Hidden ranges as `zero`. Its probe of flakey's flush was not shaped like the view (see below) |
 | **43764669843** | `81fea51` | **30 of 30** | The flush probe, shaped like the view (a linear part on a loop device, write cache `write back`, and a `flakey … error_writes` part): **a flush fails, EIO**. With `zero`, a flush of the whole view succeeds |
-| (next run) | the dropped-write commit | 31 cases | Added: **writes outside Windows' partitions are counted and reported**: four 4 KiB writes through a direct view (three into TUR's partition, one into unallocated space) must come back as 4 writes and 32 sectors in the right areas, with the notice, one history record and TUR's partition unchanged; a protected session's 64 KiB written into TUR's partition in the layer must be reported at discard. An idle session must report none |
+| **43769505329** | `39de56d` | **31 of 31** | Added: **writes outside Windows' partitions are counted and reported** (section 3.2.1). Four 4 KiB writes through a direct view came back exactly: 4 writes, 32 sectors, in 2 areas (partition 4, sectors 1697792–1707391: 3 writes, 24 sectors; unallocated space, sectors 2721792–2744799: 1 write, 8 sectors); notice TUR-DUALRUN-090 shown; one history record; TUR's partition unchanged. A protected session's 64 KiB in TUR's partition was reported from the layer at discard (128 sectors), a second record. An idle session reported none |
 
 Run 43757600470, case by case (seconds are the case's own):
 
@@ -1285,8 +1301,11 @@ Nothing was built whose purpose is to defeat licensing. The questions:
 4. **Windows 10** out of support: any term that restricts use in a virtual
    machine after the end of support.
 5. **The evaluation in CI** (section 2): does "evaluation" cover an
-   automated compatibility experiment run by a project, and who accepts the
-   terms when a workflow does?
+   automated compatibility experiment run by a project on GitHub's hosted
+   runners (2(a), 2(b), 2(c)(v), 5 and 14.d(ii) in section 2.1), and who
+   accepts the terms when a workflow does? The owner, as licensee, accepted
+   that reading on 16 November 2026 without Remote Desktop (2(d)(v)); the
+   question stays open for the lawyer.
 6. **The person's own boot files kept by TUR** on their own computer for
    repair: confirmed as not redistribution?
 
@@ -1339,8 +1358,11 @@ part and the summary (about 2,400), the workflow and CI helpers (about
 
 ## 14. Decisions for the owner
 
-1. **Microsoft's evaluation of Windows 11 Enterprise in CI: the owner's
-   decision now.** The terms were read (section 2.1). They plainly allow
+1. **Microsoft's evaluation of Windows 11 Enterprise in CI: decided by the
+   owner on 16 November 2026, "I accept, run on GitHub", without the Remote
+   Desktop part** (section 2.1, which lists the paragraphs he was shown).
+   It remains on the lawyer's list (section 11, question 5). What was put to
+   him: The terms were read (section 2.1). They plainly allow
    evaluation and test use in a virtual machine, outside a live operating
    environment, for 90 days, and say nothing against benchmarks or
    automation. They do not plainly allow installing it on a hosted CI

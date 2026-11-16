@@ -1294,7 +1294,11 @@ class Experiment:
         self.save()
         for name in ORDER:
             if name not in wanted:
-                self.results["scenarios"][name] = {"not_run": "not selected"}
+                reason = "not selected"
+                if name in self.results["meta"].get("excluded", []):
+                    reason = ("excluded" + (": no Remote Desktop (the owner's licence decision of 16 November 2026)"
+                                            if name == "remoteapp" else ""))
+                self.results["scenarios"][name] = {"not_run": reason}
                 continue
             if not installed:
                 self.results["scenarios"][name] = {"not_run": "the installation did not finish"}
@@ -1329,11 +1333,17 @@ def main() -> int:
     parser.add_argument("--iso", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--scenarios", default="")
+    parser.add_argument("--exclude", default="remoteapp",
+                        help="scenarios never run; remoteapp by default (no Remote Desktop: the owner's "
+                             "licence decision of 16 November 2026, report section 2.1)")
     parser.add_argument("--round-trips", type=int, default=5)
     parser.add_argument("--budget-minutes", type=float, default=315)
     args = parser.parse_args()
     wanted = [name.strip() for name in args.scenarios.split(",") if name.strip()] or ORDER
+    excluded = {name.strip() for name in args.exclude.split(",") if name.strip()}
+    wanted = [name for name in wanted if name not in excluded]
     experiment = Experiment(args)
+    experiment.results["meta"]["excluded"] = sorted(excluded)
     try:
         experiment.run(wanted)
     finally:

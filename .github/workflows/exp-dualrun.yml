@@ -51,6 +51,10 @@ on:
         description: "experiment only: comma-separated scenarios (empty: all)"
         required: false
         default: ""
+      exclude:
+        description: "experiment only: comma-separated scenarios never run (default remoteapp: the owner's licence decision of 16 November 2026, no Remote Desktop)"
+        required: false
+        default: "remoteapp"
       round_trips:
         description: "experiment only: native/guest round trips"
         required: false
@@ -172,12 +176,13 @@ jobs:
       - name: Experiment
         env:
           SCENARIOS: ${{ github.event.inputs.scenarios }}
+          EXCLUDE: ${{ github.event.inputs.exclude }}
           ROUND_TRIPS: ${{ github.event.inputs.round_trips }}
           DISPATCHED_BY: ${{ github.actor }}
         run: |
           python3 -u tests/experiments/dualrun/ci/experiment.py \
             --work "$WORK" --iso "$WORK/media/windows.iso" --out "$WORK/out" \
-            --scenarios "$SCENARIOS" --round-trips "${ROUND_TRIPS:-5}" --budget-minutes 315
+            --scenarios "$SCENARIOS" --exclude "${EXCLUDE-remoteapp}" --round-trips "${ROUND_TRIPS:-5}" --budget-minutes 315
 
       - name: Results
         if: always()
