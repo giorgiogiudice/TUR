@@ -1,0 +1,63 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. The controls a person sees in each window of the winsee experiment, counted by eye in the plain screenshots of run 43538249361 (docs/reports/exp-winsee-1.md, section 3), before the tiers were scored against them. 'named' are controls that show a name, with their kind; 'unnamed' are controls that show none (a toolbar icon, a text area, a drop-down list with no label), by kind. Labels, group boxes, scroll bars, status bars and title-bar buttons are not counted: they are read, not operated. The key is the capture's label in harness/winsee.py.",
+  "notepad": {
+    "named": [["File", "menu"], ["Edit", "menu"], ["Format", "menu"], ["View", "menu"], ["Help", "menu"]],
+    "unnamed": {"text": 1}
+  },
+  "notepad-font": {
+    "named": [
+      ["Font", "combo"], ["Font Style", "combo"], ["Size", "combo"], ["Script", "combo"], ["OK", "button"], ["Cancel", "button"],
+      ["System", "item"], ["Tahoma", "item"], ["Times New Roman", "item"], ["URW Bookman", "item"], ["URW Gothic", "item"],
+      ["Webdings", "item"], ["Wingdings", "item"], ["Bold", "item"], ["10", "item"]
+    ]
+  },
+  "putty": {
+    "named": [
+      ["Session", "tree item"], ["Logging", "tree item"], ["Terminal", "tree item"], ["Keyboard", "tree item"], ["Bell", "tree item"],
+      ["Features", "tree item"], ["Window", "tree item"], ["Appearance", "tree item"], ["Behaviour", "tree item"],
+      ["Translation", "tree item"], ["Selection", "tree item"], ["Colours", "tree item"], ["Connection", "tree item"],
+      ["Data", "tree item"], ["Proxy", "tree item"], ["SSH", "tree item"], ["Serial", "tree item"], ["Telnet", "tree item"],
+      ["Rlogin", "tree item"], ["SUPDUP", "tree item"],
+      ["Host Name (or IP address)", "text"], ["Port", "text"], ["Saved Sessions", "text"],
+      ["SSH", "radio"], ["Serial", "radio"], ["Other", "radio"], ["Always", "radio"], ["Never", "radio"], ["Only on clean exit", "radio"],
+      ["Default Settings", "item"],
+      ["Load", "button"], ["Save", "button"], ["Delete", "button"], ["About", "button"], ["Help", "button"], ["Open", "button"], ["Cancel", "button"]
+    ],
+    "unnamed": {"combo": 1}
+  },
+  "notepadpp": {
+    "named": [
+      ["File", "menu"], ["Edit", "menu"], ["Search", "menu"], ["View", "menu"], ["Encoding", "menu"], ["Language", "menu"],
+      ["Settings", "menu"], ["Tools", "menu"], ["Macro", "menu"], ["Run", "menu"], ["Plugins", "menu"], ["Window", "menu"], ["?", "menu"],
+      ["alpha.txt", "tab"]
+    ],
+    "unnamed": {"button": 32, "menu": 3, "text": 1}
+  },
+  "notepadpp-preferences": {
+    "named": [
+      ["General", "item"], ["Toolbar", "item"], ["Tab Bar", "item"], ["Editing 1", "item"], ["Editing 2", "item"], ["Dark Mode", "item"],
+      ["Margins/Border/Edge", "item"], ["New Document", "item"], ["Default Directory", "item"], ["Recent Files History", "item"],
+      ["File Association", "item"], ["Language", "item"], ["Indentation", "item"], ["Highlighting", "item"], ["Print", "item"],
+      ["Searching", "item"], ["Backup", "item"], ["Auto-Completion", "item"], ["Multi-Instance & Date", "item"], ["Delimiter", "item"],
+      ["Performance", "item"], ["Cloud & Link", "item"], ["Search Engine", "item"], ["MISC.", "item"],
+      ["Hide (use Alt or F10 key to toggle)", "check"], ["Hide", "check"], ["Close", "button"]
+    ],
+    "unnamed": {"combo": 3, "check": 1}
+  },
+  "sevenzip": {
+    "named": [
+      ["File", "menu"], ["Edit", "menu"], ["View", "menu"], ["Favorites", "menu"], ["Tools", "menu"], ["Help", "menu"],
+      ["Add", "button"], ["Extract", "button"], ["Test", "button"], ["Copy", "button"], ["Move", "button"], ["Delete", "button"], ["Info", "button"],
+      ["Name", "header"], ["Size", "header"], ["Modified", "header"], ["Created", "header"], ["Comment", "header"], ["Folders", "header"], ["Files", "header"],
+      ["alpha.txt", "item"], ["beta.txt", "item"], ["gamma.txt", "item"]
+    ],
+    "unnamed": {"button": 1, "text": 1}
+  },
+  "innosetup-2": {
+    "named": [
+      ["I accept the agreement", "radio"], ["I do not accept the agreement", "radio"], ["Next", "button"], ["Cancel", "button"],
+      ["Donate", "button"], ["Subscribe", "button"]
+    ],
+    "unnamed": {"text": 1}
+  }
+}

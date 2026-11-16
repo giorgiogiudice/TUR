@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# Sample pinned from F-Droid index sha256 a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72 dated 2026-11-11T13:48:33.394000+00:00; preferred ABI x86_64.
+package	group	version_name	version_code	sha256	size	file	nativecode	abi_class	min_sdk	target_sdk	name
+org.billthefarmer.editor	notes	1.98	198	343d17e11d0914e1a7708df2781580a0413e52501c0a41d91f7ef725d9615fe9	269122	org.billthefarmer.editor_198.apk	-	no native code	21	35	Editor
+net.gsantner.markor	notes	2026.10.0	164	c29412e02d03e4f0511746a1bcef48c6b73fc1f70c1024fbf04903b0b3f4c485	11849016	net.gsantner.markor_164.apk	-	no native code	21	35	Markor
+org.fossify.notes	notes	1.7.0	13	5a56e0e39cc488e1f3b947d3801006d3b7450ec73c67f03195c64c5fd3b6bced	9528948	org.fossify.notes_13.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	Fossify Notes Beta
+com.orgzlyrevived	notes	1.23.0	292	50c9d74ad453427524318c3cbe4edf8f54f15d8e2f04301f1c5ae01285fade1e	8802016	com.orgzlyrevived_292.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	36	Orgzly Revived
+org.videolan.vlc	media	3.7.2	13070208	727693d59c4d678c046386812a103209a25423460c9d22e38e12460f12402ab6	51460280	org.videolan.vlc_13070208.apk	x86_64	x86-64 native code	17	36	VLC
+org.schabi.newpipe	media	0.29.1	1015	18447bfb1e06d113edc88df93f471827280de06f6f3d4dc42f56f28b9c1bab79	11507122	org.schabi.newpipe_1015_cb84069.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	35	NewPipe
+org.fossify.gallery	media	1.14.2	40	ff3e6122ccf1873620e9e8e374b9c9dec4d7eb3a8f42559135bd82562c65f41f	38538751	org.fossify.gallery_40.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	Fossify Gallery
+org.oxycblt.auxio	media	4.1.5	75	c2053d36c28dbe74de40eadcd8978ec874c465ed3352bba655d4b2b364780b45	11229630	org.oxycblt.auxio_75.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	24	36	Auxio
+de.danoeh.antennapod	media	3.12.3	3120395	6e79f28f69cef1a8b2e4f5f88c9c3cf3c3d7c51356f01394ac23b0dc5d56a00b	17758020	de.danoeh.antennapod_3120395.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	36	AntennaPod - Podcast Player
+org.fossify.filemanager	tools	1.6.4	16	6e4656b8947966a2853681691bb0005e802ee89983fb141ec0f7186497dcd5f4	10033882	org.fossify.filemanager_16.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	Fossify File Manager
+org.fossify.clock	tools	1.6.0	10	43cf9f0ec45f1f1ff2df47286622e5b8f3acedaeb07b7f7641b5243dbedca079	9110265	org.fossify.clock_10.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	Fossify Clock Beta
+com.termux	tools	0.118.3	1002	e6265a57eb5ca363808488e3b01955958bed93bc0c8a0d281849b363b11027ec	113880067	com.termux_1002.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	24	28	Termux
+org.fdroid.fdroid	tools	1.23.2	1023052	985f5181d48bb6bafd54083a048b391271e0ab28385881cc41294fb01a222762	12426276	org.fdroid.fdroid_1023052.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	30	F-Droid
+com.beemdevelopment.aegis	tools	3.4.3	82	0eecec45de0da3ff1358004b51e2960d9178551643a6ed44f6496ea9ec999c19	6869856	com.beemdevelopment.aegis_82.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	36	Aegis Authenticator
+com.kunzisoft.keepass.libre	tools	4.5.8	45800	8b3c1818aebfb9196814eb2eea39da897b8f18e2404aa5b47f603fc56641c593	16778665	com.kunzisoft.keepass.libre_45800.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	19	36	KeePassDX Passkey Vault
+org.isoron.uhabits	tools	2.3.2	20302	8a702f85afe83385d5fb61cbcf40536411376f64bbb1712910d4ed00182b8303	10757869	org.isoron.uhabits_20302.apk	-	no native code	28	36	Loop Habit Tracker
+com.artifex.mupdf.viewer.app	tools	1.28.5a	270	18c1f0b47d89870ddbf3b93d4f4d444e479c686377c696ef54dbe0e73a7b0a0e	17128961	com.artifex.mupdf.viewer.app_270.apk	arm64-v8a,armeabi-v7a,x86	x86 32-bit only	21	36	MuPDF viewer
+net.sourceforge.opencamera	tools	1.56.2	96	ca5672ca8c7174554ca0b07b5b26e505817a05142f571cf2abe67e790c30249c	4973923	net.sourceforge.opencamera_96.apk	-	no native code	23	36	Open Camera
+org.wikipedia	reference	r/50616-r-2026-11-03	50616	d225e5d08fe461f12fa0af7b617e6e715f3112986165c34e0572a1a056129dd1	104747428	org.wikipedia_50616.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	24	37	Wikipedia
+app.organicmaps	maps	2026.09.29-32-FDroid	26092932	654a736d43317084f13560281fe7013f869800610e9d6036b6789d9c9e07f8bc	63797784	app.organicmaps_26092932.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	21	36	Organic Maps・Offline Map & GPS
+com.shatteredpixel.shatteredpixeldungeon	game	4.0.2	922	ceef4cdd4beddcb3d85379ac004cb4ab5d918b89dc7366b4ce9c4a3585a5e78e	30275058	com.shatteredpixel.shatteredpixeldungeon_922.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	21	36	Shattered Pixel Dungeon
+org.moire.opensudoku	game	4.11.3	20261008	ac4c6c8d0bc9058c1cc8d8f4570dc51977b3bc51577a82a12b94e6ec7714b9f0	19398348	org.moire.opensudoku_20261008.apk	arm64-v8a	ARM only	26	37	Open Sudoku
+eu.siacs.conversations	messenger	2.21.0+free	4218303	b9cd9d082bbe92ed3bbc34b8281b34b80a7233bb16b2f1ddcfc47af64ad877e5	32720322	eu.siacs.conversations_4218303.apk	x86_64	x86-64 native code	23	37	Conversations
+im.vector.app	messenger	1.6.62	40106624	6ce8ee6c3a5a76ab2928f3f3b6e3934c352a3fd6bf76b7ff3dc291c6cbd928de	73778195	im.vector.app_40106624.apk	x86_64	x86-64 native code	21	35	Element Classic
+com.fsck.k9	mail	24.0	39046	0f9dd57fbd06dddfd8bcf7de6106d27fa0f0297793193828c4eac904518b1e05	10895265	com.fsck.k9_39046.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	23	36	K-9 Mail
+de.baumann.browser	browser	24	159	3cb274f869f777c8b420fd55a822eca72e11e22906161b07accd19b5c8be7b36	3526260	de.baumann.browser_159.apk	-	no native code	29	37	FOSS Browser
+org.mozilla.fennec_fdroid	browser	159.0.1	1590110	c1caf99ca2bbed0e75bd53d5f9ba07a7d27cd6ed96218ecd3dd4f702adb2d4a3	134181631	org.mozilla.fennec_fdroid_1590110.apk	x86_64	x86-64 native code	26	37	Fennec F-Droid
+org.localsend.localsend_app	flutter	1.18.2	641	93e30ddbf84121ad2048c5a61763f2b37738f593699a9f0cf39a8404177aa05b	48939435	org.localsend.localsend_app_641.apk	x86_64	x86-64 native code	24	37	LocalSend
+org.jitsi.meet	react-native	26.0.0	26000004	72aab4912b08431a2340fc1fb1f181be3a07e8b7ac607e0bb9e4c3814c2e4248	19461610	org.jitsi.meet_26000004.apk	x86_64	x86-64 native code	26	35	Jitsi Meet
+de.tutao.tutanota	webview	366.261105.0	396737	53ac69352afdcb64b29294f450b86cf888d06439067b4bc0b042df94522b258c	78307327	de.tutao.tutanota_396737.apk	arm64-v8a,armeabi,armeabi-v7a,mips,mips64,x86,x86_64	x86-64 native code	26	36	Tuta Mail

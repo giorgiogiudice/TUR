@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The hand-picked sample of the Android experiment: thirty open-source
+# applications from F-Droid, chosen before anything was measured, for spread
+# across kinds of application and kinds of code (plain Java or Kotlin views,
+# Compose, native libraries, Flutter, React Native, a web view around bundled
+# web assets, a game engine, a browser engine). It is not a random sample;
+# random.lock.tsv is. Versions and hashes are pinned in sample.lock.tsv.
+#
+# package                                  kind
+org.billthefarmer.editor                   notes
+net.gsantner.markor                        notes
+org.fossify.notes                          notes
+com.orgzlyrevived                          notes
+org.videolan.vlc                           media
+org.schabi.newpipe                         media
+org.fossify.gallery                        media
+org.oxycblt.auxio                          media
+de.danoeh.antennapod                       media
+org.fossify.filemanager                    tools
+org.fossify.clock                          tools
+com.termux                                 tools
+org.fdroid.fdroid                          tools
+com.beemdevelopment.aegis                  tools
+com.kunzisoft.keepass.libre                tools
+org.isoron.uhabits                         tools
+com.artifex.mupdf.viewer.app               tools
+net.sourceforge.opencamera                 tools
+org.wikipedia                              reference
+app.organicmaps                            maps
+com.shatteredpixel.shatteredpixeldungeon   game
+org.moire.opensudoku                       game
+eu.siacs.conversations                     messenger
+im.vector.app                              messenger
+com.fsck.k9                                mail
+de.baumann.browser                         browser
+org.mozilla.fennec_fdroid                  browser
+org.localsend.localsend_app                flutter
+org.jitsi.meet                             react-native
+de.tutao.tutanota                          webview
