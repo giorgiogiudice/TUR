@@ -241,6 +241,39 @@ refuses with a plain reason ([report](reports/TUR-010.md)).
 run on a graphics card yet), and local speech so the assistant can work fully
 offline.
 
+## Re-hosting: Windows and Mac apps without Windows or a Mac (16 November 2026)
+
+Many applications sold as "for Windows" or "for Mac" are really a portable
+program (JavaScript for Electron, Java bytecode, .NET, a Godot game) inside a
+thin wrapper for that system. TUR now tests taking that portable part out of
+the person's **own** installer or Mac package and running it on the native
+Linux version of the same runtime: no Wine, no virtual machine, an ordinary
+window, visible to P@x.
+
+The test ([report](reports/exp-rehost-1.md)) used 24 open-source Electron
+applications that also publish an official Linux build, used only as the
+yardstick. Re-hosted from their **Windows** packages, **20 of 24 (83%)**
+reached a working window; from their **macOS** packages, also **20 of 24**.
+The bar set in advance was 30%. Where they worked, they matched the official
+Linux build: the same page content, the same accessibility tree in 36 of 40
+cases, the same start-up time and the same memory (median ratio 1.006). Of
+138 platform-specific native modules inside the packages, 55 had a published
+Linux build and 53 were built from their source in 1–43 s; 20 were dead ends.
+Other runtimes: NW.js 3 of 3, LÖVE 2 of 2, Ren'Py 1 of 1, Java 5 of 6, .NET
+3 of 5, Godot 3 of 5.
+
+**What this means for Mac apps.** It is TUR's first real route for them: 38
+of 47 macOS packages in the test worked. It covers apps built on portable
+runtimes (Electron, Java, .NET with Avalonia, Godot and similar), named and
+tested one by one. Apps written only for the Mac (Swift, AppKit) remain out
+of reach, and TUR will say so.
+
+**Limits.** Open-source applications only; proprietary applications' terms of
+use are a question for the lawyer (the report lists twelve, including the
+video codecs Electron bundles). Four failures had clear causes (a vendor's own
+native module not published anywhere, a module whose name was lost in
+bundling); one (Hyper) is unexplained. Not yet in TUR's image or router.
+
 ## 5. A system that heals itself
 
 **The goal.** When something breaks on one computer, P@x should explain it and
