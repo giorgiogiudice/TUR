@@ -257,6 +257,17 @@ pub enum Step {
         /// The test.
         check: Check,
     },
+    /// Create under `to` an empty directory, readable and writable by the
+    /// user, for every directory under `from`. Symbolic links are neither
+    /// followed nor copied, and no file is copied: this gives a layered
+    /// prefix the user's own directories over a read-only system.
+    MirrorDirectories {
+        /// The tree whose directories are mirrored.
+        from: PathBuf,
+        /// Where the mirror is made; only inside the runtime manager's own
+        /// directories.
+        to: PathBuf,
+    },
 }
 
 /// Serialises the contents of a binary file as their length.
@@ -307,6 +318,11 @@ impl Step {
             ),
             Step::Check { check } => format!("check that {}", check.describe()),
             Step::Require { check } => format!("require that {}", check.describe()),
+            Step::MirrorDirectories { from, to } => format!(
+                "create under {} the directories of {}, empty",
+                to.display(),
+                from.display()
+            ),
         }
     }
 }

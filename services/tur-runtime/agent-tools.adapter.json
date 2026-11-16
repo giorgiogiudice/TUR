@@ -42,6 +42,42 @@
         { "input": "app_id" }
       ],
       "success_exit_codes": [0, 6]
+    },
+    {
+      "tool": "runtime_mac_identify",
+      "kind": "command",
+      "program": "/usr/bin/tur-runtime",
+      "arguments": [
+        { "literal": "mac" },
+        { "literal": "identify" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "path" }
+      ],
+      "success_exit_codes": [0, 3]
+    },
+    {
+      "tool": "runtime_mac_list",
+      "kind": "command",
+      "program": "/usr/bin/tur-runtime",
+      "arguments": [
+        { "literal": "mac" },
+        { "literal": "list" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0]
+    },
+    {
+      "tool": "runtime_mac_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-runtime",
+      "arguments": [
+        { "literal": "mac" },
+        { "literal": "runtime" },
+        { "literal": "status" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0]
     }
   ]
 }

@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Keeps the Darling in TUR's image up to date (owner's decision, 16 November
+# 2026: Darling is installed by default and kept updated). Darling reaches a
+# computer only through TUR's own signed image updates, so a bad Darling
+# rolls back with the image. This workflow proposes the next one:
+#
+#   pick     the candidate: the commit given, or the newest master commit of
+#            darlinghq/darling whose own CI built its packages; nothing to do
+#            when it is the pinned one
+#   build    darling-runtime (workflow_call) at the candidate, not published
+#   test     macos-darling (workflow_call), strictly, on that build, with the
+#            applications of an exp-macfw run
+#   propose  only when the tests passed: publish.sh (which refuses a build
+#            with a licence text nobody has read), then a pull request that
+#            moves scripts/darling/darling.lock, image/darling.lock and
+#            services/tur-runtime/darling/runtime.json to the candidate. The
+#            pull request goes through the usual review and CI; the image
+#            build then carries the new Darling.
+#
+# Started by hand only for now (workflow_dispatch): GitHub Actions was
+# disabled for the owner's account after the project drove too much CI load.
+# Proposed once Actions is back and the first build has been published: a
+# weekly run,
+#
+#   schedule:
+#     - cron: "17 4 * * 1"    # Mondays 04:17 UTC
+#
+# with the same inputs taken from the last exp-macfw run. TUR's patch queue
+# must still apply to the candidate; a queue patch that does not apply stops
+# the build, and the pull request that moves the pin rebases or drops it.
+#
+# Opening the pull request needs the repository setting "Allow GitHub Actions
+# to create and approve pull requests".
+name: darling-update
+
+on:
+  workflow_dispatch:
+    inputs:
+      macfw_run:
+        description: "exp-macfw run whose macfw-oracle artifact holds the test applications"
+        required: true
+      darling_commit:
+        description: "Darling commit to try (empty: the newest master commit Darling's CI built)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: darling-update
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pick:
+    name: Choose the candidate commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.pick.outputs.commit }}
+      ci_run: ${{ steps.pick.outputs.ci_run }}
+      skip: ${{ steps.pick.outputs.skip }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - id: pick
+        env:
+          GIVEN: ${{ inputs.darling_commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . scripts/darling/darling.lock
+          api=https://api.github.com/repos/darlinghq/darling
+          if [ -n "$GIVEN" ]; then
+            [[ "$GIVEN" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::darling_commit must be a full commit id"; exit 1; }
+            commit="$GIVEN"; run=""
+          else
+            runs=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs?branch=master&event=push&status=success&per_page=20")
+            commit=$(jq -r '[.workflow_runs[] | select(.name == "Darling CI")][0].head_sha // empty' <<<"$runs")
+            run=$(jq -r '[.workflow_runs[] | select(.name == "Darling CI")][0].id // empty' <<<"$runs")
+            [ -n "$commit" ] || { echo "::error::no successful Darling CI run found"; exit 1; }
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "ci_run=$run" >> "$GITHUB_OUTPUT"
+          if [ "$commit" = "$DARLING_COMMIT" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "The pinned commit $commit is the newest: nothing to do." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Candidate: darlinghq/darling@$commit (pinned: $DARLING_COMMIT)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build:
+    needs: pick
+    if: needs.pick.outputs.skip == 'false'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/darling-runtime.yml
+    with:
+      darling_commit: ${{ needs.pick.outputs.commit }}
+      publish: false
+
+  test:
+    needs: [pick, build]
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    uses: ./.github/workflows/macos-darling.yml
+    with:
+      runtime_run: ${{ github.run_id }}
+      macfw_run: ${{ inputs.macfw_run }}
+      strict: true
+
+  propose:
+    name: Publish the candidate and propose it for the image
+    needs: [pick, build, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write        # the branch of the pull request
+      pull-requests: write   # the pull request
+      packages: write        # the candidate, to ghcr.io
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: darling-runtime
+          path: ${{ runner.temp }}/out
+
+      - name: Publish (refused while a licence text is unread)
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: scripts/darling/publish.sh "$RUNNER_TEMP/out"
+
+      - name: Move the pins and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.pick.outputs.commit }}
+          CI_RUN: ${{ needs.pick.outputs.ci_run }}
+        run: |
+          set -euo pipefail
+          entry="$RUNNER_TEMP/out/manifest-entry.json"
+          value() { jq -r ".$1" "$entry"; }
+          sed -i "s/^DARLING_COMMIT=.*/DARLING_COMMIT=$COMMIT/; s/^DARLING_CI_RUN=.*/DARLING_CI_RUN=$CI_RUN/" scripts/darling/darling.lock
+          sed -i \
+            -e "s/^DARLING_ID=.*/DARLING_ID=$(value id)/" \
+            -e "s/^DARLING_COMMIT=.*/DARLING_COMMIT=$COMMIT/" \
+            -e "s/^DARLING_QUEUE_SHA256=.*/DARLING_QUEUE_SHA256=$(value queue_sha256)/" \
+            -e "s/^DARLING_TAG=.*/DARLING_TAG=$(value tag)/" \
+            -e "s/^DARLING_SHA256=.*/DARLING_SHA256=$(value sha256)/" \
+            -e "s/^DARLING_SIZE=.*/DARLING_SIZE=$(value size)/" \
+            -e "s/^DARLING_SOURCE_SHA256=.*/DARLING_SOURCE_SHA256=$(value source_sha256)/" \
+            -e "s/^DARLING_SOURCE_SIZE=.*/DARLING_SOURCE_SIZE=$(value source_size)/" \
+            image/darling.lock
+          python3 -I - "$entry" services/tur-runtime/darling/runtime.json <<'EOF'
+          import json, sys
+          entry = json.load(open(sys.argv[1]))
+          path = sys.argv[2]
+          manifest = json.load(open(path))
+          kept = [a for a in manifest["artifacts"] if a["architecture"] != entry["architecture"]]
+          manifest["artifacts"] = kept + [entry]
+          open(path, "w").write(json.dumps(manifest, indent=2) + "\n")
+          EOF
+          branch="bot/darling-${COMMIT:0:12}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add scripts/darling/darling.lock image/darling.lock services/tur-runtime/darling/runtime.json
+          git commit -m "Darling: move the image's pin to darlinghq/darling@${COMMIT:0:12}" \
+            -m "Built from source with TUR's patch queue (run ${{ github.run_id }}), passed the macos-darling tests, published as $(value id)."
+          git push origin "$branch"
+          body="Built by darling-update run ${{ github.run_id }} from darlinghq/darling@$COMMIT with TUR's patch queue; macos-darling passed strictly on it; published as \`$(value id)\` (archive sha256 \`$(value sha256)\`, source sha256 \`$(value source_sha256)\`). The image carries it once this is merged."
+          jq -n --arg title "Darling: move the image's pin to ${COMMIT:0:12}" --arg head "$branch" --arg body "$body" \
+            '{title: $title, head: $head, base: "main", body: $body}' \
+            | curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/pulls" -d @- | jq -r '.html_url'

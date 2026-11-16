@@ -123,23 +123,35 @@ fn run(arguments: &[String]) -> (Option<i32>, String, String) {
 }
 
 /// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 3] = [
+const OFFERED: [&str; 6] = [
     "runtime_inspect_file",
     "runtime_autopilot_plan",
     "runtime_autopilot_results",
+    "runtime_mac_identify",
+    "runtime_mac_list",
+    "runtime_mac_status",
 ];
 
-/// The tools the manifest declares that no program performs yet.
-const NOT_OFFERED: [&str; 0] = [];
+/// The tools the manifest declares that no program performs yet: installing
+/// and removing a macOS application are consequential (class 2) and are not
+/// offered to the assistant until the trusted confirmation path exists
+/// (docs/architecture/runtime-manager.md, "Running a macOS application").
+const NOT_OFFERED: [&str; 2] = ["runtime_mac_install", "runtime_mac_uninstall"];
 
 /// Every tool with the class the manifest declares. The autopilot's tools
 /// only read: what would be tried, and what was found. Running the
 /// autopilot and applying what it found are not offered to the assistant
-/// (docs/architecture/compat-autopilot.md, "P@x").
-const CLASSES: [(&str, u64); 3] = [
+/// (docs/architecture/compat-autopilot.md, "P@x"). The macOS route's
+/// offered tools only read too.
+const CLASSES: [(&str, u64); 8] = [
     ("runtime_inspect_file", 0),
     ("runtime_autopilot_plan", 0),
     ("runtime_autopilot_results", 0),
+    ("runtime_mac_identify", 0),
+    ("runtime_mac_list", 0),
+    ("runtime_mac_status", 0),
+    ("runtime_mac_install", 2),
+    ("runtime_mac_uninstall", 2),
 ];
 
 /// A call of each offered tool: its arguments, the subcommand that performs
@@ -200,6 +212,31 @@ fn cases() -> Vec<(&'static str, Value, Vec<&'static str>, Vec<&'static str>)> {
                 "--",
                 "org.example.app",
             ],
+        ),
+        (
+            "runtime_mac_identify",
+            json!({ "path": "/home/person/Downloads/Example.dmg" }),
+            vec!["mac", "identify"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "mac",
+                "identify",
+                "--json",
+                "--",
+                "/home/person/Downloads/Example.dmg",
+            ],
+        ),
+        (
+            "runtime_mac_list",
+            json!({}),
+            vec!["mac", "list"],
+            vec!["/usr/bin/tur-runtime", "mac", "list", "--json"],
+        ),
+        (
+            "runtime_mac_status",
+            json!({}),
+            vec!["mac", "runtime", "status"],
+            vec!["/usr/bin/tur-runtime", "mac", "runtime", "status", "--json"],
         ),
     ]
 }
@@ -337,6 +374,27 @@ fn the_autopilot_tools_run_and_change_nothing() {
     let results: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
     assert_eq!(results["results"], json!([]));
     assert!(results["applied"].is_null());
+
+    // The macOS route's reading tools: nothing installed, Darling not here.
+    let line = command_line(&registry, "runtime_mac_list", json!({}));
+    let (status, stdout, stderr) = run_in(&line);
+    assert!(success("runtime_mac_list").contains(&status), "{status}: {stderr}");
+    let listed: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    assert_eq!(listed["applications"], json!([]));
+    let line = command_line(&registry, "runtime_mac_status", json!({}));
+    let (status, stdout, stderr) = run_in(&line);
+    assert!(success("runtime_mac_status").contains(&status), "{status}: {stderr}");
+    let state: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    assert!(
+        ["not-published", "not-fetched"].contains(&state["state"].as_str().unwrap_or("")),
+        "{state}"
+    );
+    // Identifying a file that is not a Mac package is a refusal, in JSON.
+    let line = command_line(&registry, "runtime_mac_identify", json!({ "path": PROGRAM }));
+    let (status, stdout, stderr) = run_in(&line);
+    assert!(success("runtime_mac_identify").contains(&status), "{status}: {stderr}");
+    let refused: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    assert_eq!(refused["error"]["code"], "TUR-RUNTIME-MACOS-001");
 
     // Reading changed nothing: the scratch directory is as empty as it was.
     let left: Vec<_> = std::fs::read_dir(&scratch)

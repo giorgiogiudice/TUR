@@ -210,6 +210,31 @@ licence notices the script copies out of the source are still where it looks
 processor variants and Vulkan and without a hard ROCm dependency, the stage
 can give way to the package.
 
+## Darling
+
+Darling, for macOS applications, is installed by default and kept updated
+with the image (owner's decision, 16 November 2026;
+[macos-darling-1](../docs/reports/macos-darling-1.md)). The image build never
+compiles it. The build stage `darling` (`image/darling/darling.sh`) fetches
+TUR's prebuilt archive from the repository's package registry by the SHA-256
+and size in [`darling.lock`](darling.lock), checks both, and unpacks it into
+`/usr/lib/tur/darling` (read-only), with `/usr/lib/tur/darling.json` naming the
+build and its licences in `/usr/share/licenses/tur-darling` (including
+`SOURCE.txt`: the corresponding source is published beside the archive).
+
+The archive is built from source, at the commit in
+`scripts/darling/darling.lock` with TUR's patch queue
+(`third-party/darling/`), on this image's pinned base, by the dispatch-only
+workflow `darling-runtime`; `darling-update` proposes newer builds as pull
+requests that move `darling.lock`. While `darling.lock` pins nothing (until the
+first build is published) the stage is empty and the image carries no Darling;
+tur-runtime then fetches the same archive when a macOS application is first
+installed.
+
+Size: the unpacked tree adds about 0.4 to 0.8 GB to the image, 90 to 150 MB
+compressed in its layer (estimates; the build's record gives the real
+numbers).
+
 ## Boot health and rollback
 
 What the image carries for [ADR-0014](../docs/adr/0014-boot-health-and-rollback.md);

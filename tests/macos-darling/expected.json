@@ -1,0 +1,4 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. What a new Darling build must keep doing before darling-update proposes it for the image (integration.py --strict). 'windows' lists {bundle, package, mode} cases that a recorded macos-darling run showed with a window; it is empty until the first run has measured any, and a case is added only from a run's results.json, with the run id in the commit message. The refusal checks and clean removal are always required.",
+  "windows": []
+}

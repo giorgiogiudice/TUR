@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's build of Darling, as one archive that a person's computer fetches
+# when it first installs a macOS application (docs/reports/macos-darling-1.md;
+# docs/architecture/runtime-manager.md, "Running a macOS application").
+#
+# Built on the OS image's own pinned base (image/base.lock), so that Darling
+# links against exactly the libraries the TUR image has, as the local AI
+# engine is (image/engine/). The base is passed in by
+# scripts/darling/build-darling.sh; do not build this file with an unpinned
+# base. The build context is the repository root.
+#
+# Two steps, as in image/Containerfile: the only one with network access
+# fetches the build tools from the base's own repositories and Darling's
+# source at the pinned commit; the second compiles with no network, applies
+# TUR's patch queue first, and leaves only the archive and its record.
+
+ARG BASE_IMAGE
+ARG BASE_DIGEST
+
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS darling
+
+# Recorded in build-record.json.
+ARG BASE_IMAGE
+ARG BASE_DIGEST
+# 1 lets a build whose host libraries are not all in the base finish, for a
+# look; such an archive is not to be published.
+ARG DARLING_ALLOW_MISSING_HOST_LIBS=0
+# A candidate commit instead of the pinned one (workflow darling-update).
+ARG DARLING_COMMIT_OVERRIDE=
+
+COPY scripts/darling/ /src/scripts/darling/
+COPY third-party/darling/ /src/third-party/darling/
+
+# With network: tools, and Darling's source and submodules at the pinned
+# commit. Nothing is compiled here.
+RUN /bin/bash /src/scripts/darling/build-darling.sh fetch
+
+# No network: TUR's patch queue, the build, the checks of what is shipped,
+# the archive. ccache's directory is mounted by build-darling.sh (-v).
+RUN --network=none /bin/bash /src/scripts/darling/build-darling.sh build
+
+FROM scratch AS out
+COPY --from=darling /out/ /

@@ -66,6 +66,85 @@
         "required": ["app_id"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "runtime_mac_identify",
+      "description": "Say what a macOS application, disk image, installer package or program is, and whether Darling, TUR's experimental macOS layer, can be expected to start it: which processors it is built for (an Apple-silicon-only application is refused with the reason), whether it uses Swift or SwiftUI (which Darling does not run), whether it is encrypted. The file is read, never run or unpacked. A disk image's or package's contents are analysed only when it is installed. It never says an application works; only a recorded run says that.",
+      "class": 0,
+      "method": "MacIdentify",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The full path of the .app bundle, .dmg, .pkg, zip archive or program.",
+            "minLength": 1,
+            "maxLength": 1999
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "runtime_mac_list",
+      "description": "List the macOS applications installed in Darling on this computer: name, version, bundle, the Darling build and mode each was installed with, and what the analysis found when it was installed. Reads only.",
+      "class": 0,
+      "method": "MacList",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "runtime_mac_status",
+      "description": "Say which Darling this computer has: part of the system (TUR installs it by default and updates it with the system), or, on a system without it, whether TUR's build has been fetched (it is fetched when the first macOS application is installed), is damaged, or is not published for this processor; which Darling commit it is. Reads only; fetches nothing.",
+      "class": 0,
+      "method": "MacStatus",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "runtime_mac_install",
+      "description": "Install a macOS application the person has (a .app bundle, .dmg, .pkg or zip archive) into a Darling prefix of its own (its own layer over the system's Darling), inside the sandbox; on a system without Darling it fetches TUR's build first. Consequential: it installs software and uses disk space; it is the person's decision.",
+      "class": 2,
+      "method": "MacInstall",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string",
+            "description": "The full path of the package.",
+            "minLength": 1,
+            "maxLength": 1999
+          }
+        },
+        "required": ["package"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "runtime_mac_uninstall",
+      "description": "Remove an installed macOS application: its Darling prefix, its private home with whatever it saved there, its record, launcher entry and logs. Consequential and not reversible; it is the person's decision.",
+      "class": 2,
+      "method": "MacUninstall",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The identifier of an installed macOS application, such as org.example.app.",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": ["app_id"],
+        "additionalProperties": false
+      }
     }
   ]
 }

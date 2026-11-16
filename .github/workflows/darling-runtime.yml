@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's build of Darling (docs/reports/macos-darling-1.md): Darling built
+# from source at the commit pinned in scripts/darling/darling.lock, with
+# TUR's patch queue (third-party/darling/patches) applied, on the OS image's
+# pinned base. The image build never compiles Darling: it takes this
+# workflow's published archive by the digest in image/darling.lock and
+# unpacks it into /usr/lib/tur/darling (owner's decision, 16 November 2026:
+# Darling is installed by default and kept updated through TUR's image
+# updates).
+#
+# Started by hand only (workflow_dispatch), or by darling-update
+# (workflow_call): no pull_request, push or schedule trigger. A cold build of
+# Darling takes an hour or more; GitHub Actions was disabled for the owner's
+# account after the project drove too much CI load, and this workflow adds
+# none until the lead starts it. One run at a time.
+#
+# build    podman build of scripts/darling/Containerfile: fetch with network,
+#          compile without; the archive, the corresponding source archive,
+#          the licence files for review (licences.md) and build-record.json
+#          as an artifact. The build refuses the archive if anything
+#          Apple-signed, any header or SDK, or Apple's Swift runtime is left
+#          in it, or if a host library it needs is not in the base.
+# publish  only when `publish` is set: scripts/darling/publish.sh, which
+#          refuses until every licence text has been read
+#          (scripts/darling/licences-reviewed.txt), pushes both archives to
+#          the repository's own package registry (ghcr.io), checks their
+#          digests and prints the pins for image/darling.lock and
+#          services/tur-runtime/darling/runtime.json.
+name: darling-runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the archive and its source to the repository's package registry (ghcr.io)"
+        type: boolean
+        default: false
+      allow_missing_host_libraries:
+        description: "Finish a build whose host libraries are not all in the base, for a look (never published)"
+        type: boolean
+        default: false
+      darling_commit:
+        description: "Build this Darling commit instead of the pinned one (empty: the pin)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+      allow_missing_host_libraries:
+        type: boolean
+        default: false
+      darling_commit:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: read   # the pinned base from TUR's mirror (ghcr.io)
+
+concurrency:
+  group: darling-runtime-${{ github.event_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build Darling from source on the pinned base
+    runs-on: ubuntu-24.04
+    # A cold build: about an hour to two (Darling's CI needs 15 to 20
+    # minutes with a warm ccache for more components than TUR builds).
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Free disk space
+        # Darling's build directory takes up to 16 GB and its source 5 GB.
+        # podman's storage goes to /mnt, the runner's second disk.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo mkdir -p /mnt/darling-podman
+          df -h / /mnt
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Restore ccache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.ccache-darling
+          key: darling-ccache-${{ hashFiles('scripts/darling/darling.lock', 'image/base.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            darling-ccache-${{ hashFiles('scripts/darling/darling.lock', 'image/base.lock') }}-
+            darling-ccache-
+
+      - name: Build
+        env:
+          DARLING_PODMAN_ROOT: /mnt/darling-podman
+          DARLING_ALLOW_MISSING_HOST_LIBS: ${{ inputs.allow_missing_host_libraries && '1' || '0' }}
+          DARLING_COMMIT_OVERRIDE: ${{ inputs.darling_commit }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DARLING_COMMIT_OVERRIDE" ] && ! [[ "$DARLING_COMMIT_OVERRIDE" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::darling_commit must be a full commit id"; exit 1
+          fi
+          export DARLING_CCACHE="$HOME/.ccache-darling"
+          mkdir -p "$DARLING_CCACHE"
+          scripts/darling/build-darling.sh image "$RUNNER_TEMP/out"
+          sudo chown -R "$(id -u):$(id -g)" ~/.ccache-darling "$RUNNER_TEMP/out" || true
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.ccache-darling
+          key: darling-ccache-${{ hashFiles('scripts/darling/darling.lock', 'image/base.lock') }}-${{ github.run_id }}
+
+      - name: Summary
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/out"
+          record="$out/build-record.json"
+          {
+            echo "## TUR's build of Darling"
+            if [ -f "$record" ]; then
+              echo '```json'
+              jq '{id, tag, darling_commit, queue_sha256, fedora_release, base_digest, sha256, size, unpacked_size, source_sha256, source_size, build_seconds, licence_texts: (.licence_texts | length), removed: (.removed | length), check: {macho_files: .check.macho_files, elf_files: .check.elf_files, violations: (.check.violations | length), missing_host_libraries: [.check.missing_host_libraries[]?.soname]}}' "$record"
+              echo '```'
+            else
+              echo "No build record: the build failed. See the log."
+            fi
+            if [ -f "$out/licences.md" ]; then
+              echo
+              echo "### Licence files, for review (the texts are in licences.md in the artifact)"
+              sed -n '/^| Repository/,/^$/p' "$out/licences.md" | head -200
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: darling-runtime
+          path: ${{ runner.temp }}/out
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: Publish to the package registry
+    needs: build
+    if: inputs.publish && !inputs.allow_missing_host_libraries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write   # pushing to ghcr.io, only when the lead asks for it
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: darling-runtime
+          path: ${{ runner.temp }}/out
+
+      - name: Publish
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: scripts/darling/publish.sh "$RUNNER_TEMP/out"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Published"
+            echo
+            echo "The package must be public for TUR's image build (and computers without Darling in"
+            echo "their image) to fetch it without signing in: an owner action, once, after the"
+            echo "first push."
+            echo
+            echo "Entry for services/tur-runtime/darling/runtime.json, and the values of image/darling.lock:"
+            echo '```json'
+            cat "$RUNNER_TEMP/out/manifest-entry.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: darling-published
+          path: ${{ runner.temp }}/out/manifest-entry.json
+          retention-days: 90

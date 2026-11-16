@@ -33,7 +33,7 @@ pub struct DesktopEntry {
 }
 
 /// Escapes a value of type string or localestring.
-fn escape_value(text: &str) -> String {
+pub(crate) fn escape_value(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for (index, character) in text.chars().enumerate() {
         match character {
@@ -52,7 +52,7 @@ fn escape_value(text: &str) -> String {
 }
 
 /// One argument of an `Exec` line, quoted, before string escaping.
-fn quote_argument(text: &str) -> String {
+pub(crate) fn quote_argument(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 2);
     out.push('"');
     for character in text.chars() {
@@ -77,7 +77,7 @@ fn unsupported(reason: &str) -> PlanError {
 
 /// Whether `launcher` can be written into an `Exec` line as it is: a program
 /// name or an absolute path made of characters that need no quoting.
-fn is_plain_launcher(launcher: &str) -> bool {
+pub(crate) fn is_plain_launcher(launcher: &str) -> bool {
     !launcher.is_empty()
         && launcher.len() <= 1024
         && (!launcher.contains('/') || is_plain_absolute(launcher))

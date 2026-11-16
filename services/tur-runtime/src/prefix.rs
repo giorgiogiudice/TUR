@@ -863,6 +863,7 @@ pub(crate) mod tests {
                 Step::Launch { .. } => "launch",
                 Step::Check { .. } => "check",
                 Step::Require { .. } => "require",
+                Step::MirrorDirectories { .. } => "mirror-directories",
             })
             .collect()
     }

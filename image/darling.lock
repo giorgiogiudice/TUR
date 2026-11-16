@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The Darling build the OS image carries in /usr/lib/tur/darling (owner's
+# decision, 16 November 2026: Darling is installed by default and kept
+# updated through TUR's image updates). Read by image/darling/darling.sh in
+# the build stage "darling" of image/Containerfile. The image never compiles
+# Darling: this pins an archive that the darling-runtime workflow built from
+# source (scripts/darling/darling.lock, third-party/darling/patches) and
+# published to the repository's package registry, by its SHA-256 and size.
+#
+# Change it only with the values publish.sh printed for a published build:
+# by hand after darling-runtime with `publish`, or through the pull request
+# darling-update opens after the candidate passed the macos-darling tests.
+# The same values go into services/tur-runtime/darling/runtime.json (the
+# fallback for systems without Darling in their image).
+#
+# Empty until the first build is published: the image then carries no
+# Darling. The first publish waits for the owner's checklist
+# (docs/reports/macos-darling-1.md, section 8): licences read, the package
+# made public.
+DARLING_ID=
+DARLING_COMMIT=3fcd2e1aa85079789d19d82415695bdecc512241
+DARLING_QUEUE_SHA256=c89ea8ce6d00b96e9748e854033a5c684cfade912723fe961ee779b343488537
+DARLING_PACKAGE=ghcr.io/giorgiogiudice/tur-darling-runtime
+DARLING_TAG=
+# The archive (opt/tur-darling/...) and its size in bytes. A bare hex digest,
+# not an image reference: this is a file in the registry, not an image.
+DARLING_SHA256=
+DARLING_SIZE=
+# The corresponding source, published beside it in the same package.
+DARLING_SOURCE_SHA256=
+DARLING_SOURCE_SIZE=

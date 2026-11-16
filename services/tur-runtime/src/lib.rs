@@ -53,6 +53,15 @@
 //!   [`autopilot_run`] does that in throwaway copies of the prefix, never in
 //!   the prefix itself.
 //!
+//! Running a macOS application:
+//!
+//! * [`macos`] installs a macOS application from its bundle, disk image or
+//!   installer package into a Darling prefix of its own, in the same
+//!   sandbox, after reading its Mach-O load commands for what would stop
+//!   it (arm64 only, SwiftUI, Swift, encryption); and keeps TUR's build of
+//!   Darling, which is fetched when it is first needed and checked by its
+//!   digest.
+//!
 //! Every operation is a plan first. A plan can be printed, compared and
 //! tested without starting anything; only [`exec::SystemExecutor`] touches
 //! the system.
@@ -94,6 +103,7 @@ pub mod launch;
 pub mod launch_host;
 pub mod limits;
 pub mod macho;
+pub mod macos;
 pub mod metadata;
 pub mod ole;
 pub mod paths;
