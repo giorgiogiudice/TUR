@@ -176,6 +176,25 @@ run apps-plan tur-apps plan com.discord.discord --offline --json
 run apps-plan-text tur-apps plan org.libreoffice.libreoffice --offline
 cd "${out}" || exit 1
 
+# ---- tur-rehost: it runs, its pinned index loads, it reads a synthetic package ------------
+# Nothing is fetched or installed. The package is a native (Qt) program made
+# here from zeros and a PE header: the detector must refuse it as native code.
+cd / || exit 1
+run rehost-version tur-rehost --version
+run rehost-index tur-rehost index --json
+run rehost-list tur-rehost list --json
+# shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+run rehost-tools /bin/bash -c 'for p in bwrap curl podman bsdtar unzip tar xz 7zz innoextract msiextract; do printf "%s\t%s\n" "$p" "$(command -v "$p" || echo missing)"; done'
+fixture="${out}/rehost-fixture/QtThing"
+mkdir -p "${fixture}"
+head -c 16384 /dev/zero > "${fixture}/QtThing.exe"
+printf 'MZ' | dd of="${fixture}/QtThing.exe" bs=1 conv=notrunc status=none
+printf '\x40' | dd of="${fixture}/QtThing.exe" bs=1 seek=60 conv=notrunc status=none
+printf 'PE\0\0\x64\x86' | dd of="${fixture}/QtThing.exe" bs=1 seek=64 conv=notrunc status=none
+cp "${fixture}/QtThing.exe" "${fixture}/Qt6Core.dll"
+run rehost-detect tur-rehost detect --json "${fixture}"
+cd "${out}" || exit 1
+
 # ---- tur-ai-local and its engine: this machine, the catalogue, what fits --------------------
 put mem_total_kib "$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
 put mem_available_kib "$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"

@@ -13,10 +13,11 @@ that breaks a rule breaks CI.
 ## The honesty rule
 
 **TUR's own ratings are those of one experiment.** Forty records rate the
-`rehost` route `usable`: the Windows and macOS packages of 20 open-source
+`rehost` route `starts`: the Windows and macOS packages of 20 open-source
 Electron applications that TUR's re-hosting experiment
 (`docs/reports/exp-rehost-1.md`, section 3.1) measured reaching their own
-first window on the Linux build of Electron. Each names its report and the
+first window on the Linux build of Electron; nothing beyond that window
+and typed text was tested, so none says `usable`. Each names its report and the
 run that holds the evidence. TUR's first automated tests of Windows
 applications (`docs/reports/windows-runtime-2.md`) are recorded as
 `reported_by = "tur-test"` with the rating `unknown` (see
@@ -76,7 +77,7 @@ Its record carries what was measured:
 ```toml
 [[editions.records]]
 route = "rehost"
-rating = "usable"
+rating = "starts"
 reported_by = "tur-test"
 test_report = "docs/reports/exp-rehost-1.md"
 version_tested = "1.143.17232"
@@ -106,7 +107,7 @@ each list. The table is required on a `rehost` record and refused on any
 other (`TUR-DESKTOP-CATALOGUE-003`). Only TUR's own test can rate the route:
 an external source cannot have measured TUR's re-host
 (`TUR-DESKTOP-CATALOGUE-006`). The router offers the route only when the
-record says `good` or `usable`.
+record says `good`, `usable` or `starts`.
 
 An entry with every route unknown is a good entry. An invented rating is not.
 The same holds for requirements and editions: enter what a reference shows,
@@ -154,6 +155,7 @@ and say in `notes` what could not be checked.
 |---|---|---|---|---|---|
 | `good` | Runs as intended, with no workaround worth mentioning | platinum | Platinum | Verified | |
 | `usable` | Runs and is usable; needs tweaks or has minor problems | gold, silver | Gold, Silver | Playable | |
+| `starts` | Starts and shows its first window, measured by TUR; nothing beyond that was tested | (none) | (none) | (none) | (none) |
 | `poor` | Runs, with problems that get in the way of normal use | bronze | Bronze | | |
 | `broken` | Does not start, or cannot be used for its purpose | borked | Garbage | Unsupported | Denied, Broken |
 | `unknown` | Not known | no tier | no test result | Unknown | |
@@ -165,6 +167,12 @@ mapped by their order (platinum, gold, silver, bronze, borked). The source's
 own word is always kept in `source_rating`, so the mapping can be checked and
 changed. AreWeAntiCheatYet's statuses "Supported" and "Running" describe the
 anti-cheat, not the whole game, and are used as references only.
+
+`starts` is TUR's own word for what TUR itself saw: the application started
+and showed its first window, and nothing beyond that was tested. No
+external source's scale maps onto it, not even a source's "it starts": a
+record that says `starts` must be `reported_by = "tur-test"`, with its
+report (`TUR-DESKTOP-CATALOGUE-006`).
 
 A rating from one of these sources describes what that source's contributors
 saw on their machines, with their versions. It is evidence, not a promise.

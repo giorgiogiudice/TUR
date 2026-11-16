@@ -1139,7 +1139,10 @@ catalogue's application identifier, for example `com.microsoft.office`.
 
 The Home page carries one standing sentence for as long as it is true: "TUR
 has not tested applications itself yet. Every rating here is what the named
-source reports."
+source reports." Once the catalogue holds ratings from TUR's own tests it
+says instead "TUR has tested _N_ applications itself. Everything else shows
+who tested it, or says that nobody has yet.", _N_ being the number of
+applications with such a rating.
 
 ### 8.2 Words the application centre uses
 
@@ -1165,7 +1168,7 @@ engine unless the engine is something the user may already know.
 | `darling` | macOS application (experimental) | An experiment. Most macOS applications do not run. |
 | No route | Cannot run on TUR | See [8.8](#88-when-there-is-no-good-route). |
 
-**How well it works** (the catalogue's `rating`). Five values. No stars, no
+**How well it works** (the catalogue's `rating`). Six values. No stars, no
 percentages and no medals: a rating that a store supplies for an application's
 quality is a different thing and is labelled with the store's name.
 
@@ -1173,6 +1176,7 @@ quality is a different thing and is labelled with the store's name.
 |---|---|---|
 | `good` | Works well | Tick in a circle |
 | `usable` | Works, with minor problems | Tick with a small exclamation mark |
+| `starts` | Starts. Under it: "TUR saw it start and show its first window. Nothing beyond that was tested." | "Play" triangle in a circle, neutral colour |
 | `poor` | Works badly | Exclamation mark in a triangle |
 | `broken` | Does not work | Cross in a circle |
 | `unknown` | No reports | Question mark in a dashed circle |
@@ -4144,7 +4148,7 @@ These answers govern where the sections above say otherwise.
 | windows-guest.md 6.7 | "Every entry is marked as a Windows application in the launcher" is done as [7.2](#72-launcher) specifies: the description line and a corner mark drawn into the icon on the host. Add the "About this application" action. |
 | windows-guest.md 7.2, 7.3, 7.4 | The setup flow's first page, the launch card and the words for the guest's states are those of [8.9](#89-setting-up-windows-and-android) and [7.5](#75-system-tray). |
 | catalogue-and-routing.md | Add the three requirements of [8.10](#810-how-it-is-built): identifiers and parameters for reasons, caveats and prerequisites; detected host facts; an updatable, signed catalogue. Add the user-facing labels of [8.2](#82-words-the-application-centre-uses) by reference. Its statement that a change to catalogue data alone does not start CI is out of date. |
-| `schemas/app-profile.schema.json` | `test_status` has four values (`untested`, `works`, `partial`, `broken`); the catalogue's `rating` has five (`good`, `usable`, `poor`, `broken`, `unknown`). One scale should serve both; this document uses the catalogue's. |
+| `schemas/app-profile.schema.json` | `test_status` has four values (`untested`, `works`, `partial`, `broken`); the catalogue's `rating` has six (`good`, `usable`, `starts`, `poor`, `broken`, `unknown`). One scale should serve both; this document uses the catalogue's. |
 | pax-providers.md 10 | Add the data file of tested models and their prices that the setup flow needs ([9.12](#912-setting-up-px)). |
 | AGENTS.md | The list of GPL-only Qt modules is incomplete: add Charts, Data Visualization, Lottie, HTTP Server, GRPC, MQTT, CoAP, Network Authorization, Quick 3D Physics, Canvas Painter [Q1]. Add: KDE frameworks that contain GPL files and must not be linked or imported ([3.5](#35-qt-and-kde-libraries-a-tur-program-may-link)). Add: a TUR program is a `QGuiApplication`. Layout table: `desktop/` is QML and C++. |
 | tests/boot | The setup-done flag and the fabricated account change with D-06. |

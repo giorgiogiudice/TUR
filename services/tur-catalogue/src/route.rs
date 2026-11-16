@@ -19,7 +19,7 @@
 //! | 1 | Flatpak, then native Linux | A Linux edition exists |
 //! | 2 | Web application, primary | The web application is the publisher's primary form |
 //! | 3 | Container of another distribution | The Linux edition is another distribution's package |
-//! | 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and TUR's own test says its re-host works |
+//! | 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and TUR's own test says its re-host starts or works |
 //! | 5 | Proton (games) or Wine (other Windows applications) | A Windows edition exists |
 //! | 5 | Windows guest, directly after its compatibility layer | Not a game; and the layer is rated poor or broken, or is unrated with a known obstacle, or the user asks; and virtual machines are not forbidden |
 //! | 6 | Android runtime | An Android edition exists |
@@ -1262,15 +1262,15 @@ fn prerequisites(route: Route, edition: &Edition, host: &HostFacts) -> Vec<Prere
 
 /// The evidence that makes the router offer the re-hosted route for an
 /// edition: that of its best `rehost` record (TUR's own test first, then
-/// the most recent), when that record says the re-host works (`good` or
-/// `usable`) and states what was measured. `None` for every other edition:
-/// an unmeasured re-host is never offered.
+/// the most recent), when that record says the re-host at least starts
+/// (`good`, `usable` or `starts`) and states what was measured. `None` for
+/// every other edition: an unmeasured re-host is never offered.
 pub fn rehost_evidence(edition: &Edition) -> Option<&RehostEvidence> {
     if !matches!(edition.kind, EditionKind::Windows | EditionKind::Macos) {
         return None;
     }
     let record = best_record(edition, Route::Rehost)?;
-    if !record.rating.is_supporting() {
+    if !record.rating.shows_it_starts() {
         return None;
     }
     record.rehost.as_ref()
@@ -1420,7 +1420,9 @@ fn windows_options(
                 layer.rating.as_str()
             ),
         ))
-    } else if layer.rating == Rating::Unknown && known_obstacle {
+    } else if !layer.rating.is_supporting() && known_obstacle {
+        // Unknown, or `starts`: seeing the first window says nothing about
+        // the part a known requirement stands in the way of.
         Some((
             ReasonCode::GuestKnownObstacle,
             Params::new(),
@@ -3266,6 +3268,58 @@ mod tests {
                 Severity::Blocker
             );
         }
+    }
+
+    #[test]
+    fn a_rehost_that_only_starts_is_offered_and_overtakes_nothing() {
+        // `starts`: offered, clear when nothing is known against it.
+        let started = measured(windows(), Rating::Starts, &[], &[]);
+        let alone = entry(Category::Productivity, vec![started.clone()]);
+        let options = run(&alone, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost, Route::Wine]);
+        assert_eq!(options[0].rating, Rating::Starts);
+        assert_eq!(options[0].outlook, Outlook::Clear);
+        assert!(options[0].recommended);
+
+        // It does not move a Linux edition rated broken behind it: only
+        // `good` or `usable` is "clearly better".
+        let worse = entry(
+            Category::Productivity,
+            vec![rated(flatpak(), Route::Flatpak, Rating::Broken), started.clone()],
+        );
+        let options = run(&worse, &full_host(), &Preferences::default());
+        assert_eq!(
+            routes(&options),
+            [Route::Flatpak, Route::Rehost, Route::Wine]
+        );
+        assert_eq!(recommended(&options).route, Route::Rehost);
+
+        // It does not outweigh a known obstacle.
+        let dongle = entry(
+            Category::Productivity,
+            vec![requiring(started, &[Requirement::HardwareDongle])],
+        );
+        let options = run(&dongle, &full_host(), &Preferences::default());
+        let rehost = options
+            .iter()
+            .find(|option| option.route == Route::Rehost)
+            .unwrap();
+        assert_eq!(rehost.outlook, Outlook::Doubtful);
+
+        // On Wine, a known obstacle still brings the guest.
+        let layer = entry(
+            Category::Productivity,
+            vec![rated(
+                requiring(windows(), &[Requirement::KernelDriver]),
+                Route::Wine,
+                Rating::Starts,
+            )],
+        );
+        let options = run(&layer, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Wine, Route::WindowsGuest]);
+        assert_eq!(options[1].reason_code, ReasonCode::GuestKnownObstacle);
+        assert!(!Rating::Starts.is_adverse() && !Rating::Starts.is_supporting());
+        assert!(Rating::Starts.shows_it_starts());
     }
 
     #[test]

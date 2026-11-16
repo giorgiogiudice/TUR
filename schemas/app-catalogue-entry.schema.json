@@ -100,8 +100,8 @@
       }
     },
     "rating": {
-      "description": "How well a route runs an edition. good: runs as intended, with no workaround worth mentioning. usable: runs and is usable; needs tweaks or has minor problems. poor: runs, with problems that get in the way of normal use. broken: does not start, or cannot be used for its purpose. unknown: not known; the only rating that needs no source.",
-      "enum": ["good", "usable", "poor", "broken", "unknown"]
+      "description": "How well a route runs an edition. good: runs as intended, with no workaround worth mentioning. usable: runs and is usable; needs tweaks or has minor problems. starts: starts and shows its first window, measured by TUR; nothing beyond that was tested; only TUR's own test gives it, no external source's scale maps onto it. poor: runs, with problems that get in the way of normal use. broken: does not start, or cannot be used for its purpose. unknown: not known; the only rating that needs no source.",
+      "enum": ["good", "usable", "starts", "poor", "broken", "unknown"]
     },
     "record": {
       "description": "What is known about how well one route runs one edition.",
@@ -176,6 +176,10 @@
         }
       },
       "allOf": [
+        {
+          "if": { "properties": { "rating": { "const": "starts" } }, "required": ["rating"] },
+          "then": { "properties": { "reported_by": { "const": "tur-test" } } }
+        },
         {
           "if": { "properties": { "route": { "const": "rehost" } } },
           "then": { "required": ["rehost"] },

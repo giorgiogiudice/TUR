@@ -176,15 +176,16 @@ fn rehost_record(rating: Rating, native_builds: bool, unresolved: bool) -> Recor
     record
 }
 
-/// Whether TUR's own test says the edition's re-host works, with what was
-/// measured: the one case in which the re-hosted route may appear. Written
-/// here from the records, independently of the router.
+/// Whether TUR's own test says the edition's re-host at least starts
+/// (`good`, `usable` or `starts`), with what was measured: the one case in
+/// which the re-hosted route may appear. Written here from the records,
+/// independently of the router.
 fn rehost_measured(edition: &Edition) -> bool {
     matches!(edition.kind, EditionKind::Windows | EditionKind::Macos)
         && edition.records.iter().any(|record| {
             record.route == Route::Rehost
                 && record.reported_by == Reporter::TurTest
-                && record.rating.is_supporting()
+                && matches!(record.rating, Rating::Good | Rating::Usable | Rating::Starts)
                 && record.rehost.is_some()
         })
 }
@@ -512,7 +513,8 @@ fn guest_only_for_a_reason(case: &Case<'_>, options: &[RouteOption]) {
                 && caveat.requirement != Some(Requirement::HeavyGpu)
         });
         let reason = layer.rating.is_adverse()
-            || (layer.rating == Rating::Unknown && known_obstacle)
+            // Unknown or `starts`: no rating says Wine runs it in use.
+            || (matches!(layer.rating, Rating::Unknown | Rating::Starts) && known_obstacle)
             || asked;
         assert!(
             reason,
@@ -1163,10 +1165,11 @@ fn rehost_edition_space() {
     let variants = [Preferences::default(), pinned(Route::Rehost)];
     // The record of TUR's test: its rating, whether native modules were
     // built, whether some had no Linux build. None: no record.
-    let records: [Option<(Rating, bool, bool)>; 6] = [
+    let records: [Option<(Rating, bool, bool)>; 7] = [
         None,
         Some((Rating::Usable, false, false)),
         Some((Rating::Good, true, true)),
+        Some((Rating::Starts, true, false)),
         Some((Rating::Unknown, false, false)),
         Some((Rating::Poor, true, false)),
         Some((Rating::Broken, false, true)),
@@ -1203,8 +1206,9 @@ fn rehost_edition_space() {
                                 .reason_parts
                                 .iter()
                                 .any(|part| part.code == ReasonCode::MacosNoDarling);
-                            let supporting =
-                                measured.is_some_and(|(rating, _, _)| rating.is_supporting());
+                            let supporting = measured.is_some_and(|(rating, _, _)| {
+                                matches!(rating, Rating::Good | Rating::Usable | Rating::Starts)
+                            });
                             let rehost = options.iter().find(|option| option.route == Route::Rehost);
                             assert_eq!(rehost.is_some(), supporting, "{}", case.describe());
                             let Some(rehost) = rehost else {
@@ -1277,8 +1281,8 @@ fn rehost_edition_space() {
             }
         }
     }
-    assert_eq!(cases, 2 * 2 * 256 * 6 * 16 * 2);
-    assert_eq!(offered, cases / 3);
+    assert_eq!(cases, 2 * 2 * 256 * 7 * 16 * 2);
+    assert_eq!(offered, cases / 7 * 3);
 }
 
 // ---------------------------------------------------------------------------

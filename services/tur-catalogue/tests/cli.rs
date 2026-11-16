@@ -154,6 +154,8 @@ fn validate_accepts_the_seed_catalogue() {
         Some(applications as u64)
     );
     assert_eq!(report["statistics"]["rated_by_tur_tests"], 40);
+    // Over 20 applications: what the application centre's Home view says.
+    assert_eq!(report["statistics"]["applications_tested_by_tur"], 20);
 }
 
 #[test]

@@ -538,28 +538,20 @@ fn extract(
     output: &Path,
     strip_components: Option<u32>,
 ) -> Result<(), Failure> {
-    let bsdtar = environment
-        .tools
-        .bsdtar
-        .clone()
-        .ok_or_else(|| Failure::new(Code::ProgramMissing, "bsdtar (libarchive) is needed and is not installed"))?;
     std::fs::create_dir_all(output).map_err(|error| step(error, "cannot create a directory"))?;
+    let (program, tool_args) = unpack::extract_command(environment.tools, archive, output, strip_components)?;
     let archive_text = archive
         .to_str()
         .ok_or_else(|| Failure::new(Code::InputInvalid, "a path is not valid UTF-8"))?;
     let output_text = output
         .to_str()
         .ok_or_else(|| Failure::new(Code::InputInvalid, "a path is not valid UTF-8"))?;
-    let bsdtar_text = bsdtar
+    let program_text = program
         .to_str()
         .ok_or_else(|| Failure::new(Code::InputInvalid, "a path is not valid UTF-8"))?;
     let mut args = tool_arguments(&environment.tools.root, &[archive_text], output_text);
-    args.push(bsdtar_text.to_owned());
-    args.extend(["-x", "-f", archive_text, "-C", output_text, "--no-same-owner", "--no-same-permissions"].map(str::to_owned));
-    if let Some(count) = strip_components {
-        args.push("--strip-components".to_owned());
-        args.push(count.to_string());
-    }
+    args.push(program_text.to_owned());
+    args.extend(tool_args);
     let invocation = crate::runner::Invocation {
         purpose: format!("unpack {}", archive.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
         program: environment.tools.bwrap.clone(),

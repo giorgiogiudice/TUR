@@ -45,6 +45,8 @@ COPY services/tur-device-manager/agent-tools.json services/tur-device-manager/ag
      /usr/share/tur-pax-e2e/repo/services/tur-device-manager/
 COPY services/tur-diagnostics/agent-tools.json services/tur-diagnostics/agent-tools.adapter.json \
      /usr/share/tur-pax-e2e/repo/services/tur-diagnostics/
+COPY services/tur-rehost/agent-tools.json services/tur-rehost/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-rehost/
 COPY services/tur-runtime/agent-tools.json services/tur-runtime/agent-tools.adapter.json \
      /usr/share/tur-pax-e2e/repo/services/tur-runtime/
 COPY services/tur-storage/agent-tools.json services/tur-storage/agent-tools.adapter.json \

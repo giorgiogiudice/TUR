@@ -43,6 +43,7 @@ QtObject {
     readonly property var ratingNames: ({
         "good": qsTr("good"),
         "usable": qsTr("usable"),
+        "starts": qsTr("starts"),
         "poor": qsTr("poor"),
         "broken": qsTr("broken"),
         "unknown": qsTr("unknown")

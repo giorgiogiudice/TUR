@@ -217,7 +217,7 @@ assert not missing, f"not in the image: {missing}"
 done < "${programs}"
 check "programs a person or an adapter starts are in /usr/bin" bash -c \
     'for p in tur-diag tur-device tur-storage tur-catalogue tur-runtime tur-update tur-pax tur-pax-memory tur-boot-health \
-              tur-apps tur-ai-local llama-server; do
+              tur-apps tur-ai-local tur-rehost llama-server; do
          [ -x "/usr/bin/$p" ] || { echo "$p"; exit 1; }; done'
 check "every component of the list that ships assistant tools has them installed, and no other" bash -c \
     '[ "$(ls -1 /usr/share/tur/pax/tools | LC_ALL=C sort | tr "\n" " ")" = "$1" ] || { ls -1 /usr/share/tur/pax/tools; exit 1; }' \

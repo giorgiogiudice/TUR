@@ -153,8 +153,8 @@ const QStringList &Answers::routes()
 const QStringList &Answers::ratings()
 {
     static const QStringList values {
-        QStringLiteral("good"), QStringLiteral("usable"), QStringLiteral("poor"), QStringLiteral("broken"),
-        QStringLiteral("unknown"),
+        QStringLiteral("good"), QStringLiteral("usable"), QStringLiteral("starts"), QStringLiteral("poor"),
+        QStringLiteral("broken"), QStringLiteral("unknown"),
     };
     return values;
 }

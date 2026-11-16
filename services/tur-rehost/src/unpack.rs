@@ -56,6 +56,11 @@ pub struct Tools {
     pub msiextract: Option<PathBuf>,
     /// `xz`.
     pub xz: Option<PathBuf>,
+    /// Info-ZIP's `unzip`: zip archives when `bsdtar` is not installed.
+    pub unzip: Option<PathBuf>,
+    /// GNU `tar`: tar archives (also compressed) when `bsdtar` is not
+    /// installed.
+    pub tar: Option<PathBuf>,
     /// The host's root layout, for the sandbox.
     pub root: RootLayout,
 }
@@ -69,15 +74,77 @@ impl Tools {
                 "bubblewrap (bwrap) is not installed: no archive is opened outside the sandbox",
             )
         })?;
-        Ok(Tools {
+        Ok(Tools::with_sandbox(bwrap))
+    }
+
+    fn with_sandbox(bwrap: PathBuf) -> Tools {
+        Tools {
             bwrap,
             bsdtar: find_program(&["bsdtar"]),
             sevenzip: find_program(&["7zz", "7z", "7za"]),
             innoextract: find_program(&["innoextract"]),
             msiextract: find_program(&["msiextract"]),
             xz: find_program(&["xz"]),
+            unzip: find_program(&["unzip"]),
+            tar: find_program(&["tar"]),
             root: RootLayout::of_host(),
-        })
+        }
+    }
+}
+
+/// The program and arguments that extract `archive` (zip or tar, also
+/// compressed) into `output`, dropping `strip` leading path components: the
+/// archive's own tool when the machine has it (`bsdtar`), otherwise
+/// `unzip` for a zip and GNU `tar` for a tar, which TUR's base image is more
+/// likely to carry. Runs inside the tool sandbox (the caller adds it).
+pub fn extract_command(
+    tools: &Tools,
+    archive: &Path,
+    output: &Path,
+    strip: Option<u32>,
+) -> Result<(PathBuf, Vec<String>), Failure> {
+    let archive_text = utf8(archive)?.to_owned();
+    let output_text = utf8(output)?.to_owned();
+    if let Some(bsdtar) = &tools.bsdtar {
+        let mut args = vec![
+            "-x".to_owned(),
+            "-f".to_owned(),
+            archive_text,
+            "-C".to_owned(),
+            output_text,
+            "--no-same-owner".to_owned(),
+            "--no-same-permissions".to_owned(),
+        ];
+        if let Some(count) = strip {
+            args.push("--strip-components".to_owned());
+            args.push(count.to_string());
+        }
+        return Ok((bsdtar.clone(), args));
+    }
+    let kind = sniff::sniff(archive).map_err(|error| {
+        Failure::new(Code::Unreadable, format!("cannot read {}: {error}", archive.display()))
+    })?;
+    match (kind, &tools.unzip, &tools.tar) {
+        (Container::Zip, Some(unzip), _) if strip.is_none() => Ok((
+            unzip.clone(),
+            vec!["-q".to_owned(), "-o".to_owned(), archive_text, "-d".to_owned(), output_text],
+        )),
+        (Container::Tar | Container::TarCompressed, _, Some(tar)) => {
+            let mut args = vec![
+                "-x".to_owned(),
+                "-f".to_owned(),
+                archive_text,
+                "-C".to_owned(),
+                output_text,
+                "--no-same-owner".to_owned(),
+                "--no-same-permissions".to_owned(),
+            ];
+            if let Some(count) = strip {
+                args.push(format!("--strip-components={count}"));
+            }
+            Ok((tar.clone(), args))
+        }
+        _ => Err(missing("bsdtar (libarchive), or unzip and tar", "this archive")),
     }
 }
 
@@ -89,15 +156,7 @@ impl Tools {
     pub fn find_lenient(bwrap: Option<PathBuf>) -> Tools {
         match Tools::find(bwrap) {
             Ok(tools) => tools,
-            Err(_) => Tools {
-                bwrap: PathBuf::from("/usr/bin/bwrap"),
-                bsdtar: find_program(&["bsdtar"]),
-                sevenzip: find_program(&["7zz", "7z", "7za"]),
-                innoextract: find_program(&["innoextract"]),
-                msiextract: find_program(&["msiextract"]),
-                xz: find_program(&["xz"]),
-                root: RootLayout::of_host(),
-            },
+            Err(_) => Tools::with_sandbox(PathBuf::from("/usr/bin/bwrap")),
         }
     }
 }
@@ -261,21 +320,8 @@ impl Opener<'_> {
     }
 
     fn bsdtar(&mut self, input: &Path, output: &Path) -> Result<bool, Failure> {
-        let program = self
-            .tools
-            .bsdtar
-            .clone()
-            .ok_or_else(|| missing("bsdtar (libarchive)", "this archive"))?;
-        let args = vec![
-            "-x".to_owned(),
-            "-f".to_owned(),
-            utf8(input)?.to_owned(),
-            "-C".to_owned(),
-            utf8(output)?.to_owned(),
-            "--no-same-owner".to_owned(),
-            "--no-same-permissions".to_owned(),
-        ];
-        let ok = self.tool("bsdtar", &program, &args, &[input], output)?;
+        let (program, args) = extract_command(self.tools, input, output, None)?;
+        let ok = self.tool("extract", &program, &args, &[input], output)?;
         Ok(ok || !is_empty_dir(output))
     }
 
@@ -774,8 +820,37 @@ mod tests {
             innoextract: Some(PathBuf::from("/usr/bin/innoextract")),
             msiextract: Some(PathBuf::from("/usr/bin/msiextract")),
             xz: Some(PathBuf::from("/usr/bin/xz")),
+            unzip: Some(PathBuf::from("/usr/bin/unzip")),
+            tar: Some(PathBuf::from("/usr/bin/tar")),
             root: RootLayout::merged(),
         }
+    }
+
+    #[test]
+    fn without_bsdtar_a_zip_goes_to_unzip_and_a_tar_to_tar() {
+        let directory = scratch("fallback");
+        let zip = directory.join("a.zip");
+        let mut bytes = b"PK\x05\x06".to_vec();
+        bytes.extend_from_slice(&[0u8; 18]);
+        std::fs::write(&zip, &bytes).unwrap();
+        let tgz = directory.join("a.tgz");
+        std::fs::write(&tgz, b"\x1f\x8b\x08\x00 not really gzip").unwrap();
+        let mut tools = tools();
+        tools.bsdtar = None;
+        let out = directory.join("out");
+        let (program, args) = extract_command(&tools, &zip, &out, None).unwrap();
+        assert_eq!(program, PathBuf::from("/usr/bin/unzip"));
+        assert!(args.contains(&"-d".to_owned()));
+        let (program, args) = extract_command(&tools, &tgz, &out, Some(1)).unwrap();
+        assert_eq!(program, PathBuf::from("/usr/bin/tar"));
+        assert!(args.contains(&"--strip-components=1".to_owned()));
+        tools.tar = None;
+        tools.unzip = None;
+        assert_eq!(
+            extract_command(&tools, &zip, &out, None).unwrap_err().code,
+            Code::ProgramMissing
+        );
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

@@ -151,8 +151,11 @@ catalogue directory, host facts and preferences given to the router are
 given to `tur-apps` too.
 
 The Home view's standing sentence asks `tur-catalogue validate --json`
-(added for it) and stands only while `rated_by_tur_tests` is 0; while the
-count is not known, nothing is said about it.
+(added for it). While `rated_by_tur_tests` is 0 it says that TUR has not
+tested applications itself yet; once it is not, it says "TUR has tested N
+applications itself. Everything else shows who tested it, or says that
+nobody has yet.", N being `applications_tested_by_tur`. While the counts are
+not known, nothing is said about it.
 
 ## 2a. Installing: how the centre runs tur-apps
 

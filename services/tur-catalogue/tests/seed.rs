@@ -58,7 +58,8 @@ fn the_re_hosted_seed_applications_are_tur_s_measurements_and_route_so() {
                 rehost_records += 1;
                 assert!(REHOSTED.contains(&entry.id.as_str()), "{}", entry.id);
                 assert_eq!(record.reported_by, Reporter::TurTest, "{}", entry.id);
-                assert_eq!(record.rating, Rating::Usable, "{}", entry.id);
+                // The first window and typed text, nothing more: `starts`.
+                assert_eq!(record.rating, Rating::Starts, "{}", entry.id);
                 assert_eq!(record.test_report.as_deref(), Some(REHOST_REPORT));
                 let evidence = record.rehost.as_ref().unwrap();
                 assert_eq!(evidence.runtime, "electron", "{}", entry.id);

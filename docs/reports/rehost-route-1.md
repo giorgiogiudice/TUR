@@ -30,7 +30,8 @@ SUMMARY
   (fetched prebuilds, or built on the person's computer without network
   when allowed), launches it in a bubblewrap sandbox as a native window,
   and removes it without leftovers. The catalogue gained the route
-  `rehost`, offered only for an edition a TUR record measured working;
+  `rehost`, offered only for an edition a TUR record measured (at least
+  starting and showing its first window);
   the experiment's 40 working variants are the seed records (20 new
   entries). tur-apps installs by the route from the person's own file.
 - Why: the experiment passed its kill criterion by a wide margin (20 of 24
@@ -44,7 +45,11 @@ FILES
   docs/architecture/rehost.md; docs/reports/rehost-route-1.md;
   catalogue/<20 entries>.toml; tests/rehost/{corpus.json,run.sh,
   integration.py}; .github/workflows/rehost.yml
-- Modified: crates/tur-core (REHOST family); services/tur-catalogue
+- Modified: image/{programs.tsv,Containerfile,Containerfile.containerignore,
+  README.md}; .github/workflows/{image,boot}.yml (triggers);
+  tests/image/smoke.sh; tests/boot/{report.py,guest/Containerfile,
+  guest/rootfs/usr/libexec/tur-boot-test/component-checks};
+  docs/architecture/pax-orchestrator.md (tool table); crates/tur-core (REHOST family); services/tur-catalogue
   (model, validator, router, host facts, report, tests); services/tur-apps
   (src/{plan,ops,records,paths,cli,main,lib,exec,codes}.rs, new
   src/rehost.rs, tests/{cli,interfaces}.rs, tests/fakes/tur-rehost,
@@ -70,7 +75,8 @@ TESTS
 - Integration tests: tests/rehost (five open-source packages of the
   experiment's corpus, by hand only: workflow rehost); tur-rehost
   tests/cli.rs on synthetic packages; NOT RUN
-- Boot tests: not applicable (nothing here is in the image or the boot path)
+- Boot tests: written (tur-rehost runs on the installed system, detect on
+  a synthetic fixture); NOT RUN
 - Hardware tests: NOT RUN (no hardware runner)
 - Performance tests: NOT RUN
 
@@ -81,8 +87,8 @@ DIAGNOSTICS
 - Relevant error IDs: TUR-REHOST-* (docs/architecture/rehost.md, section 9)
 
 RECOVERY
-- Rollback procedure: revert the pull request. Nothing in the image
-  changes; a re-hosted application is removed with `tur-rehost uninstall`
+- Rollback procedure: revert the pull request (the image loses
+  /usr/bin/tur-rehost; nothing else in the boot path changes); a re-hosted application is removed with `tur-rehost uninstall`
   (or by deleting ~/.local/share/tur/rehost/apps/<app-id>)
 - Recovery tested: no
 
@@ -150,7 +156,7 @@ tur-rehost list | show <id> | launch <id> [--accessibility] | uninstall <id> | i
 |---|---|
 | **What** | Electron's Linux x86-64 release archive, `electron-v<version>-linux-x64.zip`, 110 to 127 MB, at exactly the version the payload names. With `--codecs open-only`, also `ffmpeg-v<version>-linux-x64.zip` (about 1.4 MB), Electron's media library built with open codecs only. For a native build, `node-v<version>-headers.tar.gz` (about 340 KB) |
 | **From where** | The Electron project's GitHub releases (`https://github.com/electron/electron/releases/download/v<version>/`) and, for headers, `https://artifacts.electronjs.org/headers/dist/v<version>/`. A unit test holds every URL of the index to these hosts and the npm registry |
-| **When, by whom** | By the person's computer, the first time an application needs that version, when the person installs it. Never in the image (the image does not contain Electron, nor yet `tur-rehost`) |
+| **When, by whom** | By the person's computer, the first time an application needs that version, when the person installs it. Never in the image (the image contains `tur-rehost`, never Electron) |
 | **Verified how** | Its SHA-256 and size against TUR's pinned index (`services/tur-rehost/data/index.json`), whose digests were taken from each release's `SHASUMS256.txt` (and agreed with GitHub's published asset digest for 18 of the 19 versions). `curl` reads no configuration, speaks HTTPS only, also on redirects, and stops at the pinned size. A file that differs is deleted; nothing in it is used (`TUR-REHOST-FETCH-002`). A cached file is checked again before each use. A version not in the index is refused (`TUR-REHOST-INDEX-002`), never fetched |
 | **What the person is told** | Before anything is fetched, the plan says: "TUR downloads Electron's own Linux build from the Electron project's releases on GitHub, unchanged, and checks it against the SHA-256 TUR pinned. It is not part of TUR. It contains media codecs (H.264 and AAC) that TUR does not ship; the download is made by this computer, at your request, as with Proton." The plan lists each download with size and licence. The router's caveats `rehost.runtime-fetched` and `rehost.not-publisher-supported` say the same in the application centre. The record keeps what was fetched, from where, its digest and licence |
 
@@ -214,9 +220,14 @@ the measured package.
   Min, MQTTX, Podman Desktop, Rocket.Chat, Standard Notes, Tabby, Trilium
   Notes, VSCodium, Zulip), each with its Linux edition (no record: nothing
   is claimed about it here), its Windows edition and its macOS edition, each
-  of the latter with one `usable` record from TUR's test, evidence run and
-  report. `usable`, not `good`: only the first window and typed text were
-  measured.
+  of the latter with one record from TUR's test, evidence run and report,
+  rated `starts`: a new rating, "starts and shows its first window, measured
+  by TUR; nothing beyond that was tested" (owner's decision 4). `starts` is
+  only TUR's own (an external scale never maps to it); it offers the
+  re-host, is not adverse, but does not outweigh a known obstacle (the
+  option is then doubtful) and never moves a route ahead of a Linux
+  edition. The centre shows it as "Starts: TUR saw it start and show its
+  first window. Nothing beyond that was tested."
 - tur-apps: `plan` and `install` by the route from the person's own file
   (`--installer FILE`; without it the existing "supply the installer"
   refusal), `--allow-builds`; when the file is the package TUR measured
@@ -228,10 +239,23 @@ the measured package.
   as not built. Not done in tur-apps: `--codecs open-only` is not exposed,
   its end-to-end script (`ci/e2e.py`) does not run the real tur-rehost, and
   its P@x tool descriptions do not mention the route yet.
-- The application centre: its fixtures (vocabulary, statistics) and words
-  extended so that it keeps building; the Home view's sentence "TUR has not
-  tested applications itself yet" is now hidden, because 40 records are
-  TUR's own.
+- The application centre: its fixtures (vocabulary, statistics, a new
+  statistic `applications_tested_by_tur`, 20) and words extended so that it
+  keeps building; its Home view now says "TUR has tested 20 applications
+  itself. Everything else shows who tested it, or says that nobody has
+  yet.", with the number from the catalogue (owner's decision 6), and the
+  old sentence when the number is 0. The new rating has its own glyph,
+  which has not been through the contrast check in either theme.
+- The image: `tur-rehost` is a program of the image (`image/programs.tsv`,
+  the Containerfile, its ignore file, the image and boot workflows'
+  triggers), with its P@x tools installed (owner's decision 3). The boot
+  test runs it on the installed system: `--version`, `index`, `list`, the
+  archive tools present, and `detect` on a synthetic Qt program (must be
+  refused as native code). The base image adds no package: `tur-rehost`
+  opens zip and tar with `bsdtar`, or else `unzip` and GNU `tar`; NSIS, Inno
+  Setup, MSI, 7z and disk images need 7-Zip, innoextract or msitools, which
+  the base image does not carry, so on TUR those packages are refused with
+  `TUR-REHOST-HOST-001` until a decision adds them (section 8).
 
 ## 6. Limits and what is NOT RUN
 
@@ -242,13 +266,15 @@ window has been opened by it. In particular:
 - the rust workflow (tur-rehost, tur-catalogue, tur-apps, tur-core and every
   component that links tur-core) and the desktop workflow (the centre's
   QML tests and screenshots, whose Home view changes);
+- the image and boot workflows: the image build needs `tur-rehost`'s
+  `Cargo.lock`, which CI writes on its first run, so the image cannot build
+  before the lockfile fix is applied;
 - the integration workflow `rehost` (five packages, started by hand only);
 - a native build in the build environment, and whether Fedora's node-gyp
   builds all 26 pinned modules as the experiment's node-gyp 11.2.0 did;
 - the application sandbox around a real Electron program: Chromium's own
   sandbox inside bubblewrap, Wayland, PipeWire, the accessibility bus;
-- the image: `tur-rehost` is not in it (until it is, the router asks for it
-  as a prerequisite on TUR itself).
+- which archive tools the installed TUR has (the boot test records it).
 
 Limits of what is built:
 
@@ -269,7 +295,8 @@ Limits of what is built:
 > is built on, from the person's own package, without Wine and without a
 > virtual machine, through a separate program, `tur-rehost`, that never
 > runs the installer. The router offers the route only for an edition whose
-> re-host TUR measured working, recorded in the catalogue with its package
+> re-host TUR measured (at least starting and showing its first window,
+> rated `starts`), recorded in the catalogue with its package
 > digest and evidence; it is listed after any Linux edition and before
 > Wine, and it is never presented as the publisher's Linux version. The
 > runtime is fetched by the person's computer at the payload's exact
@@ -292,24 +319,34 @@ Limits of what is built:
 Not proposed: the "pretend" variant; a TUR build service; any claim for a
 proprietary application before it is measured.
 
-## 8. Decisions for the owner
+## 8. The owner's decisions (16 November 2026)
 
-1. **Codecs default.** `upstream` (as instructed) or `open-only` until the
-   lawyer answers question 10? Both are built; the default is one line.
-2. **Native builds on the person's computer** instead of a TUR build
-   service (section 4). Confirm, or ask for the service (then TUR becomes
-   the distributor of the built binaries: question 11).
-3. **`tur-rehost` in the image** (`image/programs.sh`): not done here, to
-   keep this change out of the image and boot path. Until it is, the route
-   is listed with the prerequisite "install tur-rehost" on TUR itself.
-4. **The seed's rating**: `usable` for 40 records measured to the first
-   window. Keep, or hold them at `unknown` until a feature test exists.
-5. **Different package than measured**: tur-apps re-hosts it with a plain
-   note ("not measured") and without the record's allowance for missing
-   modules. Keep, or refuse until measured.
-6. **The centre's Home sentence** "TUR has not tested applications itself
-   yet" disappears now that 40 records are TUR's own: confirm the wording
-   the centre should show instead (a centre follow-up).
+1. **Codecs**: `upstream` stays the default. The person's computer fetches
+   Electron unchanged from its official release on first use, like Proton;
+   TUR ships none of it; the plan says so plainly before downloading.
+   `--codecs open-only` stays available. The question stays on the
+   lawyer's list (question 10).
+2. **Native modules are built on the person's computer**, as built here.
+   Confirmed.
+3. **`tur-rehost` is in the image now**, so the route needs no
+   prerequisite on TUR; the boot test checks that it runs (`--version`,
+   `index`, `list`, and `detect` on a synthetic fixture). Applied.
+4. **Seed rating**: first-window-only results are not called `usable`. The
+   catalogue had no rating for "starts and shows its first window, measured
+   by TUR", so one was added, `starts`, with a plain description in the
+   schema and the centre's words, and the 40 records use it. Applied.
+5. **Unmeasured packages**: keep installing them with the plain "not
+   measured" note. Kept.
+6. **The centre's Home sentence**: "TUR has tested N applications itself.
+   Everything else shows who tested it, or says that nobody has yet.", N
+   computed from the catalogue (20 today). Applied.
+
+Still open, raised by decision 3: the base image adds no package, so on
+TUR the packages that need 7-Zip, innoextract or msitools (NSIS and Inno
+Setup installers, MSI, 7z, disk images) are refused with
+`TUR-REHOST-HOST-001`. Adding those three Fedora packages to the image
+changes the rule that the image adds no package to its pinned base
+(image/README.md); it needs its own decision, and probably an ADR.
 
 ## 9. Questions for the owner's lawyer (carried from exp-rehost-1, section 11)
 

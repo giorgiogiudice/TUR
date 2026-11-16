@@ -142,19 +142,33 @@ each with a title, a URL and the date it was checked.
 |---|---|
 | `good` | Runs as intended, with no workaround worth mentioning |
 | `usable` | Runs and is usable; needs tweaks or has minor problems |
+| `starts` | Starts and shows its first window, measured by TUR; nothing beyond that was tested. Only from TUR's own test |
 | `poor` | Runs, with problems that get in the way of normal use |
 | `broken` | Does not start, or cannot be used for its purpose |
 | `unknown` | Not known. The only rating that needs no source |
 
 How each external source's own scale maps onto this one is in
 [`catalogue/README.md`](../../catalogue/README.md). The source's own word is
-always kept beside the mapped rating.
+always kept beside the mapped rating. No source's scale maps onto `starts`:
+a record that says `starts` must be `tur-test` (`TUR-DESKTOP-CATALOGUE-006`).
+
+How the router reads `starts`:
+
+| Question | `starts` |
+|---|---|
+| Is it adverse (`poor`, `broken`)? | No: no "reported inadequate" caveat, and it never moves a route down |
+| Is the outlook clear? | Yes when nothing known stands in the way. It does not outweigh a known obstacle the way `good` or `usable` does: the first window says nothing about the part the obstacle affects, so the option is then doubtful |
+| Does it offer a re-host? | Yes: a re-host is offered when its best record says `good`, `usable` or `starts` |
+| Can the route it rates overtake a Linux edition rated `poor` or `broken`? | No: only `good` or `usable` is "clearly better" |
+| On Wine with a known obstacle, is the guest offered? | Yes, as for an unrated Wine: no rating says Wine runs it in use |
+| Is it counted as TUR's own rating (`rated_by_tur_tests`)? | Yes |
 
 ## Sourcing and the honesty rule
 
 TUR's own ratings come from one experiment: the re-hosting experiment
 ([exp-rehost-1](../reports/exp-rehost-1.md), section 3.1) rates the `rehost`
-route of 40 packages `usable`. Everything else the catalogue rates is what a
+route of 40 packages `starts`: each reached its own first window, and
+nothing beyond that was tested. Everything else the catalogue rates is what a
 public source reports, attributed to that source, and `unknown` everywhere
 else. TUR's own automated tests of four Windows applications are recorded,
 with their report, as `unknown` (see [Not built](#not-built)).
@@ -165,7 +179,7 @@ A record states who it comes from in `reported_by`:
 |---|---|---|---|
 | `nobody` | `unknown` only | | Any source field |
 | `external` | Any | `source_name`, `source_url`; and `source_rating`, the source's own words, unless the rating is `unknown` | `test_report`; a source name that is TUR itself |
-| `tur-test` | Any | `test_report`, a path under `docs/reports/` or `tests/`; `version_tested` | Any external source field |
+| `tur-test` | Any; the only reporter that may say `starts` | `test_report`, a path under `docs/reports/` or `tests/`; `version_tested` | Any external source field |
 
 The rules are enforced, not only written down:
 
@@ -203,7 +217,10 @@ Bruno, draw.io, balenaEtcher, Freelens, Heroic Games Launcher, Jitsi Meet,
 Joplin, Logseq, LosslessCut, MarkText, Mattermost, Min, MQTTX, Podman
 Desktop, Rocket.Chat, Standard Notes, Tabby, Trilium Notes, VSCodium and
 Zulip, the `rehost` route of its Windows and of its macOS edition is
-`usable`, with the run that measured it. Their Linux edition, the
+`starts`, with the run that measured it. `validate --json` counts these 40
+records in `rated_by_tur_tests` and the 20 applications in
+`applications_tested_by_tur`, the number the application centre's Home view
+gives. Their Linux edition, the
 publisher's own, has no record. Four further records are TUR's own tests of
 Wine, all `unknown` (see [Not built](#not-built)); every other route is
 unknown. The external sources, all checked on 12 November 2026:
@@ -384,7 +401,7 @@ Options are listed in this order.
 | 1 | Flatpak, then native Linux | A Linux edition exists |
 | 2 | Web application, primary | The web application is the publisher's primary form |
 | 3 | Container of another distribution | The Linux edition is another distribution's package |
-| 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and its best `rehost` record, TUR's own test, says `good` or `usable` |
+| 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and its best `rehost` record, TUR's own test, says `good`, `usable` or `starts` |
 | 5 | Proton for a game; Wine for any other Windows application | A Windows edition exists |
 | 5 | Windows guest, directly after its compatibility layer | See the decision table below |
 | 6 | Android runtime | An Android edition exists |
@@ -431,7 +448,7 @@ It never changes the order.
 | Android edition | Android runtime |
 | Android edition needing Play Integrity | **No route** unless another edition has one. The Android runtime is listed, blocked: "needs a phone certified by Google: it will refuse to run" |
 | Android edition with ARM-only code | Blocked on a machine that is not ARM, unless the user supplied ARM translation: then a warning |
-| Windows or macOS edition whose re-host TUR measured working (`good` or `usable`) | Re-hosted, after any Linux edition and before Wine, Proton and the guest, with what it is, the runtime TUR fetches and any module with no Linux build |
+| Windows or macOS edition whose re-host TUR measured starting or working (`good`, `usable` or `starts`) | Re-hosted, after any Linux edition and before Wine, Proton and the guest, with what it is, the runtime TUR fetches and any module with no Linux build |
 | Windows or macOS edition whose re-host is unmeasured, unknown, `poor` or `broken` | Not re-hosted |
 | macOS edition and another edition | The other edition's routes. Darling last, and only if enabled |
 | macOS edition only, measured re-host | Re-hosted; Darling after it if enabled |
@@ -447,7 +464,7 @@ It never changes the order.
 `requirement_severity` gives the weight of a requirement on a route. A
 **blocker** means the route cannot work. An **obstacle** means the route does
 not meet the requirement and the application probably will not work fully; a
-record that says `good` or `usable` outweighs an obstacle, except where the
+record that says `good` or `usable` (not `starts`) outweighs an obstacle, except where the
 obstacle comes from the machine. Every option carries a caveat for every
 requirement of its edition.
 
@@ -502,7 +519,7 @@ The invariants are asserted over an enumerated input space in
 | `macos_edition_space` | 256 requirement sets; two sources; three ratings; 12 hosts; pinned or not | 36 864 |
 | `linux_and_web_edition_space` | Five edition templates; 256 requirement sets; three ratings; three hosts; three preference sets | 34 560 |
 | `mixed_edition_space` | All 127 combinations of seven editions; web primary or not; game or not; no requirement or one of the eight on every edition; four rating patterns; three hosts; eight preference sets | 438 912 |
-| `rehost_edition_space` | A Windows or a macOS edition; a Linux edition beside it or not; 256 requirement sets; no record or five records of TUR's test of the re-host; 16 hosts (architecture, `tur-rehost`, builds allowed, Darling); pinned or not | 196 608 |
+| `rehost_edition_space` | A Windows or a macOS edition; a Linux edition beside it or not; 256 requirement sets; no record or six records of TUR's test of the re-host (`good`, `usable`, `starts`, `unknown`, `poor`, `broken`); 16 hosts (architecture, `tur-rehost`, builds allowed, Darling); pinned or not | 229 376 |
 
 Every case is checked against every invariant:
 
@@ -551,13 +568,14 @@ Each routing rule also has a named unit test in
 | Is the Windows guest "better" than a web edition? | Not for deciding whether to list the web edition: the guest costs a Windows licence and memory. Both are listed |
 | What does "prefer open source" change? | The order within a rung only |
 | A game pinned to Wine, or another application pinned to Proton | Not honoured; the option list says so. Proton is for games and Wine for the rest |
-| "Unknown with a known blocker" | The layer is unrated and carries an obstacle the guest would get round: a kernel driver, a dongle, hardware-attested copy protection, a closed store. Heavy GPU use is not one: the guest has no usable GPU acceleration either |
+| "Unknown with a known blocker" | The layer is unrated, or rated only `starts`, and carries an obstacle the guest would get round: a kernel driver, a dongle, hardware-attested copy protection, a closed store. Heavy GPU use is not one: the guest has no usable GPU acceleration either |
 | Kernel anti-cheat in something that is not a game | Same answer: no route, dual boot |
 | Hardware-attested copy protection | An obstacle, not a blocker: such software often still runs at reduced quality |
 | A Linux edition rated poor against Darling rated good | Darling stays last. It is experimental |
 | The 16 GB figure for the guest | Used as a caveat. Below about 15 GB of installed memory the guest is marked doubtful. ADR-0007 calls the figure indicative, to be measured |
 | Architectures other than x86-64 | Re-hosted, Proton, Wine, the guest and Darling are blocked (the measured packages and their native modules are x86-64). Linux, Android and web editions are not checked for the architecture |
-| Where does a re-host rank, and when is it offered? (Not in ADR-0007: proposed by exp-rehost-1, 9.1 and 12) | After every Linux edition, before Wine and Proton; only when TUR's own test says it works |
+| Where does a re-host rank, and when is it offered? (Not in ADR-0007: proposed by exp-rehost-1, 9.1 and 12) | After every Linux edition, before Wine and Proton; only when TUR's own test says it starts or works |
+| A record that saw the first window and nothing more (decided 16 November 2026) | Its own rating, `starts`, never `usable`. Not adverse; clear when nothing known stands in the way, but it outweighs no obstacle and overtakes no Linux edition; enough to offer a re-host. See the table under [Rating scale](#rating-scale) |
 | The Android "then" column is empty | Where an Android edition is blocked, the alternative is a certified phone or tablet |
 
 ## Relation to `tur-runtime`
@@ -685,16 +703,19 @@ These are not yet registry entries in the sense of §29.3.
   that TUR had tested nothing. Since task D-11 the sentence is conditional:
   `tur-centre` shows it only while `tur-catalogue validate --json` counts
   no rating from TUR's own tests. The 40 `rehost` records of the
-  re-hosting experiment are such ratings, so the sentence is no longer
-  shown for the seed catalogue.
+  re-hosting experiment are such ratings, so for the seed catalogue Home
+  says instead "TUR has tested 20 applications itself. Everything else
+  shows who tested it, or says that nobody has yet.", the number being
+  `applications_tested_by_tur`.
 - **Re-hosting itself.** The router offers the `rehost` route and says what
   it needs; `tur-rehost` does the re-hosting, and `tur-apps` installs by
   this route from the person's own package
   ([app-install-backend.md](app-install-backend.md#the-re-hosted-route)).
   A person's own successful re-host is not an input:
-  only a catalogue record of TUR's test is. "Works" in the 40 records means
+  only a catalogue record of TUR's test is. The 40 records say `starts`:
   the application's own first window and typed text, nothing more
-  (exp-rehost-1, 3.1).
+  (exp-rehost-1, 3.1). A re-host is rated `good` or `usable` only after a
+  test of its use.
 - **Host detection.** Host facts are stated by the caller. The detection in
   `tur-runtime` is not used.
 - **Fallback to inspection.** An application that is not in the catalogue is

@@ -772,6 +772,10 @@ pub enum Rating {
     Good,
     /// Runs and is usable; needs tweaks or has minor problems.
     Usable,
+    /// Starts and shows its first window, measured by TUR; nothing beyond
+    /// that was tested. Only TUR's own test gives it: no external source's
+    /// scale maps onto it.
+    Starts,
     /// Runs, with problems that get in the way of normal use.
     Poor,
     /// Does not start, or cannot be used for its purpose.
@@ -782,9 +786,10 @@ pub enum Rating {
 
 impl Rating {
     /// Every rating, best first, ending with [`Rating::Unknown`].
-    pub const ALL: [Rating; 5] = [
+    pub const ALL: [Rating; 6] = [
         Rating::Good,
         Rating::Usable,
+        Rating::Starts,
         Rating::Poor,
         Rating::Broken,
         Rating::Unknown,
@@ -795,15 +800,23 @@ impl Rating {
         match self {
             Rating::Good => "good",
             Rating::Usable => "usable",
+            Rating::Starts => "starts",
             Rating::Poor => "poor",
             Rating::Broken => "broken",
             Rating::Unknown => "unknown",
         }
     }
 
-    /// Whether the rating says the route works: `good` or `usable`.
+    /// Whether the rating says the route works in use: `good` or `usable`.
+    /// `starts` is not enough: only the first window was seen.
     pub const fn is_supporting(self) -> bool {
         matches!(self, Rating::Good | Rating::Usable)
+    }
+
+    /// Whether the rating says the application at least starts on the
+    /// route: `good`, `usable` or `starts`.
+    pub const fn shows_it_starts(self) -> bool {
+        matches!(self, Rating::Good | Rating::Usable | Rating::Starts)
     }
 
     /// Whether the rating says the route is inadequate: `poor` or `broken`.

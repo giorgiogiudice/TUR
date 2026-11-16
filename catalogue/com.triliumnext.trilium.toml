@@ -32,7 +32,7 @@ licence = "open-source"
 
 [[editions.records]]
 route = "rehost"
-rating = "usable"
+rating = "starts"
 reported_by = "tur-test"
 test_report = "docs/reports/exp-rehost-1.md"
 version_tested = "0.107.0"
@@ -62,7 +62,7 @@ licence = "open-source"
 
 [[editions.records]]
 route = "rehost"
-rating = "usable"
+rating = "starts"
 reported_by = "tur-test"
 test_report = "docs/reports/exp-rehost-1.md"
 version_tested = "0.107.0"

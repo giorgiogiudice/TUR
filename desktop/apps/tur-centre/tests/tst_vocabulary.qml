@@ -97,6 +97,11 @@ Item {
             compare(sorted(Object.keys(Words.ratingLabels)), sorted(router.ratings))
             compare(Words.ratingLabel("good"), "Works well")
             compare(Words.ratingLabel("usable"), "Works, with minor problems")
+            // TUR saw the first window, and nothing more: not "works".
+            compare(Words.ratingLabel("starts"), "Starts")
+            compare(Words.ratingExplanation("starts"),
+                    "TUR saw it start and show its first window. Nothing beyond that was tested.")
+            compare(Words.ratingExplanation("good"), "")
             compare(Words.ratingLabel("poor"), "Works badly")
             compare(Words.ratingLabel("broken"), "Does not work")
             // Unknown is unknown. It is not "works", and it is not "does

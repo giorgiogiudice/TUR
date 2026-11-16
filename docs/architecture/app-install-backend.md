@@ -25,8 +25,8 @@ router chose:
   it is;
 - **Re-hosted** (the `rehost` route): the Windows or macOS package of an
   application the person has, run on Linux's own build of its portable
-  runtime (Electron) by `tur-rehost`, where TUR measured that it works
-  ([exp-rehost-1](../reports/exp-rehost-1.md)); see
+  runtime (Electron) by `tur-rehost`, where TUR measured that it starts or
+  works ([exp-rehost-1](../reports/exp-rehost-1.md)); see
   [The re-hosted route](#the-re-hosted-route).
 
 Every other route is refused before anything is done, with a stable code and

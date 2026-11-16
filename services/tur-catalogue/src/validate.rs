@@ -779,6 +779,14 @@ fn check_record(
         )),
         (None, false) => {}
     }
+    if record.rating == Rating::Starts && record.reported_by == Reporter::External {
+        findings.add(
+            Code::UnsourcedRating,
+            format!(
+                "{what}: starts is TUR's own measurement, the first window and nothing more; no external source's scale maps onto it"
+            ),
+        );
+    }
     if record.route == Route::Rehost
         && record.reported_by == Reporter::External
         && record.rating != Rating::Unknown
@@ -1598,12 +1606,34 @@ mod tests {
 
     #[test]
     fn a_rating_without_a_source_is_refused_unless_it_is_unknown() {
-        for rating in [Rating::Good, Rating::Usable, Rating::Poor, Rating::Broken] {
+        for rating in [
+            Rating::Good,
+            Rating::Usable,
+            Rating::Starts,
+            Rating::Poor,
+            Rating::Broken,
+        ] {
             let mut record = unknown(Route::Wine);
             record.rating = rating;
             assert_eq!(codes(&with_record(record)), [Code::UnsourcedRating]);
         }
         assert_eq!(codes(&with_record(unknown(Route::Wine))), NONE);
+    }
+
+    #[test]
+    fn only_tur_s_own_test_says_that_an_application_starts() {
+        // TUR's own test: on a re-host, and on any other route.
+        assert_eq!(codes(&with_record(rehosted(Rating::Starts))), NONE);
+        assert_eq!(codes(&with_record(tur_test(Route::Wine, Rating::Starts))), NONE);
+        // No external source's scale maps onto it.
+        let record = external(Route::Proton, Rating::Starts);
+        let text = messages(&with_record(record.clone()));
+        assert_eq!(codes(&with_record(record)), [Code::UnsourcedRating]);
+        assert!(text.contains("starts is TUR's own measurement"), "{text}");
+        // Nor does the autopilot rate.
+        let mut autopilot = autopilot(Route::Wine);
+        autopilot.rating = Rating::Starts;
+        assert_eq!(codes(&with_record(autopilot)), [Code::UnsourcedRating]);
     }
 
     #[test]

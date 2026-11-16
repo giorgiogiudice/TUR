@@ -5,18 +5,18 @@ import QtQuick
 import QtQuick.Shapes
 import Tur.Kit as Kit
 
-// The five rating icons of desktop-experience.md, section 8.2. No stars, no
+// The six rating icons of desktop-experience.md, section 8.2. No stars, no
 // percentages, no medals. Each rating has a shape of its own, so that it is
 // never told by colour alone: a tick in a circle, a tick with a small
-// exclamation mark, an exclamation mark in a triangle, a cross in a circle,
-// and a question mark in a dashed circle.
+// exclamation mark, a "play" triangle in a circle, an exclamation mark in a
+// triangle, a cross in a circle, and a question mark in a dashed circle.
 //
 // The icon is decoration. The rating's words stand beside it and are what a
 // screen reader reads.
 Item {
     id: glyph
 
-    // The catalogue's rating: good, usable, poor, broken or unknown.
+    // The catalogue's rating: good, usable, starts, poor, broken or unknown.
     property string rating: "unknown"
     property real size: 16
 
@@ -72,10 +72,31 @@ Item {
         }
     }
 
+    // Starts, its first window and nothing more: a "play" triangle in a
+    // circle, in the neutral colour, since it is not "works".
+    Shape {
+        anchors.fill: parent
+        visible: glyph.rating === "starts"
+        antialiasing: true
+
+        ShapePath {
+            strokeColor: glyph.tint
+            strokeWidth: glyph.strokeWidth
+            fillColor: "transparent"
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+            scale: Qt.size(glyph.width / 16, glyph.height / 16)
+
+            PathSvg {
+                path: "M 1.75 8 A 6.25 6.25 0 0 1 14.25 8 A 6.25 6.25 0 0 1 1.75 8 Z M 6.5 5.25 L 11 8 L 6.5 10.75 Z"
+            }
+        }
+    }
+
     // No reports: a question mark in a dashed circle.
     Shape {
         anchors.fill: parent
-        visible: !glyph.fromKit && glyph.rating !== "usable"
+        visible: !glyph.fromKit && glyph.rating !== "usable" && glyph.rating !== "starts"
         antialiasing: true
 
         ShapePath {

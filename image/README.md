@@ -56,6 +56,7 @@ TUR's own programs are compiled inside the image build, in a build stage of the
 | `tur-installer` | `installer/tur-installer-core` | `/usr/libexec/tur/` | – |
 | `tur-apps` | `services/tur-apps` | `/usr/bin/` | `tur-apps` |
 | `tur-ai-local` | `services/tur-ai-local` | `/usr/bin/` | `tur-ai-local` |
+| `tur-rehost` | `services/tur-rehost` | `/usr/bin/` | `tur-rehost` |
 
 `/usr/bin` holds what a person types and what an assistant tool adapter
 starts by path; `/usr/libexec/tur` holds what units and other programs start.
@@ -81,9 +82,9 @@ What goes with the programs:
 | `/usr/share/licenses/tur-third-party/` | the crates, as fetched | `crates.tsv`: which program holds which crate, with version, declared licence and checksum; `<crate>-<version>/`: the licence files that crate ships; `rust-std-<version>/`: those of the Rust standard library |
 
 Every component of the list that has `agent-tools.json` at its top level has
-its tools installed: eight today (`tur-ai-local`, `tur-apps`,
-`tur-catalogue`, `tur-device-manager`, `tur-diagnostics`, `tur-runtime`,
-`tur-storage`, `tur-update`). The smoke test and the boot test derive that
+its tools installed: nine today (`tur-ai-local`, `tur-apps`,
+`tur-catalogue`, `tur-device-manager`, `tur-diagnostics`, `tur-rehost`,
+`tur-runtime`, `tur-storage`, `tur-update`). The smoke test and the boot test derive that
 list, and the number of programs, from `programs.tsv`.
 
 How the stage works, and why:
@@ -149,6 +150,13 @@ What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
 No package is added. The smoke test checks each.
+`tur-rehost` uses what the base has: `bwrap`, `curl`, `podman` (native
+builds only), and to unpack archives `bsdtar` when it is there, otherwise
+`unzip` and GNU `tar`. 7-Zip, `innoextract` and `msitools` (NSIS and Inno
+Setup installers, MSI packages, disk images) are not in the base image and
+not added: `tur-rehost` refuses those packages on TUR with
+`TUR-REHOST-HOST-001` until a decision adds them. The boot test records
+which of these programs the installed system has.
 
 ## The local AI engine
 

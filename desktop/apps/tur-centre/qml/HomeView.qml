@@ -7,9 +7,10 @@ import Tur.Kit as Kit
 
 // Home: a short, honest front page (desktop-experience.md, section 8.1).
 //
-// Its standing sentence stands "for as long as it is true": while the
-// catalogue holds no rating from TUR's own tests (`tur-catalogue validate
-// --json`, rated_by_tur_tests = 0). While that is not known, nothing is
+// Its standing sentence says what is true of the catalogue's counts
+// (`tur-catalogue validate --json`): that TUR has tested nothing itself
+// while rated_by_tur_tests = 0, and otherwise how many applications TUR has
+// tested (applications_tested_by_tur). While that is not known, nothing is
 // said about it.
 //
 // For people coming from Windows, Google Chrome is offered with one action
@@ -31,6 +32,11 @@ ColumnLayout {
 
     readonly property bool turHasRatedNothing: view.catalogue !== null
                                                && view.catalogue.statistics.rated_by_tur_tests === 0
+    // How many applications TUR has rated itself; -1 while that is not
+    // known (no counts yet, or a catalogue program that does not give it).
+    readonly property int applicationsTestedByTur: view.catalogue !== null
+                                                   && typeof view.catalogue.statistics.applications_tested_by_tur === "number"
+                                                   ? view.catalogue.statistics.applications_tested_by_tur : -1
     readonly property var chromeInstalled: view.apps !== null && view.apps.installed.length >= 0
                                            ? view.apps.installedEntry(Words.chromeId) : ({})
 
@@ -50,9 +56,9 @@ ColumnLayout {
     Kit.Banner {
         objectName: "homeStandingSentence"
         Layout.fillWidth: true
-        visible: view.turHasRatedNothing
+        visible: view.turHasRatedNothing || view.applicationsTestedByTur > 0
         severity: Kit.Banner.Info
-        text: qsTr("TUR has not tested applications itself yet. Every rating here is what the named source reports.")
+        text: Words.testedByTurSentence(view.turHasRatedNothing ? 0 : view.applicationsTestedByTur)
     }
 
     Kit.Card {

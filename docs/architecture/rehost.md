@@ -68,7 +68,8 @@ tur-rehost uninstall <app-id>  delete everything of it → check nothing is left
    sandbox* (no network, nothing writable but the output directory, the
    input read-only): `bsdtar` for zip and tar, 7-Zip (`7zz`) for 7z, NSIS
    (and electron-builder's `$PLUGINSDIR/app-64.7z` inside it) and disk
-   images, `innoextract`, `msiextract`, and for a macOS `.pkg` `bsdtar` plus
+   images, `innoextract`, `msiextract` (when `bsdtar` is missing, `unzip`
+   for a zip and GNU `tar` for a tar), and for a macOS `.pkg` `bsdtar` plus
    `xz` (the `pbzx` stream is split into its xz chunks here). Squirrel's
    `Setup.exe` has its zip cut out here. A directory or `.app` bundle is
    read where it is.
@@ -153,7 +154,7 @@ Fedora. So:
 - **What is fetched, from where**: the file above, unchanged, by the
   person's computer, the first time an application needs that version, and
   only when the person installs that application. Never in the image: the
-  image does not contain Electron (nor, yet, `tur-rehost`).
+  image contains `tur-rehost`, never Electron.
 - **Verified how**: `curl` reads no configuration, speaks HTTPS only, also
   on redirects, and stops at the pinned size; the file's SHA-256 and size
   must equal the index's pin, or it is deleted (`-FETCH-002`) and nothing in
@@ -352,6 +353,11 @@ the computer: class 2, and not a tool, as with `tur-apps`.
   NSIS installer, a release prebuild, and with `builds` a source build),
   each detected, planned, installed with the real runtime download,
   started on a headless X server until a window maps, and removed.
+- Image and boot: the smoke test finds `/usr/bin/tur-rehost` and its P@x
+  tools installed; the boot test runs `tur-rehost --version`, `index` and
+  `list` on the installed system, records which archive tools it has, and
+  runs `detect` on a synthetic native (Qt) program made from zeros and a PE
+  header, which must be refused as native code. Nothing is fetched.
 
 ## 12. Not built
 
@@ -364,9 +370,15 @@ the computer: class 2, and not a tool, as with `tur-apps`.
   filtered session bus (`xdg-dbus-proxy`).
 - Installing the launcher entry where the desktop looks (the desktop
   bridge, as for `tur-runtime`).
-- `tur-rehost` in the image (`image/programs.sh`): until it is, the router's
-  host fact `rehost` is false on TUR and the route asks for it as a
-  prerequisite.
+- The archive tools on TUR itself. `tur-rehost` is in the image
+  (`image/programs.tsv`, decided 16 November 2026), so the route needs no
+  prerequisite there. The base image adds no package (image/README.md):
+  zip and tar archives are opened with `bsdtar` when the base has it and
+  with `unzip` and GNU `tar` otherwise, but NSIS and Inno Setup installers,
+  MSI packages, 7z archives and disk images need 7-Zip, `innoextract` or
+  `msitools`, which the base does not carry; on TUR those packages are
+  refused with `TUR-REHOST-HOST-001` until a decision adds the packages. The
+  boot test records which of these programs the installed system has.
 - Source builds of Rust and CMake modules; a cache of built modules.
 - ARM machines: x86-64 only, as measured.
 - A seccomp filter and resource limits, as for Windows applications.
