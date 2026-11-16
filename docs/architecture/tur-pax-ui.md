@@ -383,6 +383,22 @@ style), `qml/SetupVoice.qml`, and voice in `src/agentclient.*`,
 | Live conversation | "Talk with P@x" when `GetVoiceStatus` says live is available: `StartLiveSession` with `shown_by_caller`. While it runs the panel's foot says "In conversation · the microphone is on" with the microphone lit, and End (`EndLiveSession`); Meta+Esc ends it too. The bar's microphone is not offered meanwhile |
 | Setup | After consent: "Speak to P@x", free and on this computer first: the recognition model and the voices with their download sizes, licences in plain words and credits; the language; "P@x answers out loud" (off); that P@x listens for no wake word; then live conversation, on this computer first and free, providers marked "Optional · paid with your own key" with the company their voice goes to and an estimate a minute; a provider needs its consent text's box ticked. "Download and switch on (187 MB)" calls `PrepareVoice` with the size shown, follows `VoiceProgress`, then `SetVoiceSettings`; "Not now" leaves voice off |
 
+**The owner's decisions (16 November 2026)** in the voice step:
+
+| Decision | In the window |
+|---|---|
+| 1. The language follows the system's | "Same as the system" is the first language choice and the default; the line above it says "Language: follows your system (Italiano)" when `GetVoiceStatus.language.system` is a language P@x speaks, "Language: Detected automatically" otherwise |
+| 4. Small machines keep their tier, and say it | When `recognition.warning` is given (Whisper tiny, weak in Italian), it is shown as it is, and the recommended model and the `alternatives` (Whisper base, Parakeet) are choices with "Recommended for this computer", their tier in words, their download, and the credit a licence asks for (Parakeet: CC BY 4.0). Choosing another sends `recognition.model` in `SetVoiceSettings`, and the total shown and given to `PrepareVoice` (with `models`: recognition, detector, programs and voices by id) is that of the choice |
+| 5. "Always wait for me to press Send" | A box, off: "P@x shows what it heard for 2 seconds before it changes anything. Turn this on to send every spoken request yourself." It sets `transcript_check` to `wait` (off: `show`) |
+| 6. Spoken answers in a local voice | "P@x answers out loud", off, "spoken, in a voice on this computer" |
+| 7. A provider suggested, never chosen | With `live.suggestion` (the person has that provider's key), its engine comes right under the local one, which stays chosen: "OpenAI: gpt-realtime-2.1-mini, about 0.03 USD a minute, paid with your own key · your voice is sent to OpenAI", "Suggested because you have a key for OpenAI"; choosing it sends `live.model` and needs its consent box as before |
+| 11. Piper downloaded with the voices | `GetVoiceStatus.engines` are listed under the voices: "Piper 1.8.0, GPL-3.0-or-later, runs as a separate program", with their download in the total |
+
+There is no voice page in the panel or in tur-settings yet; the setup's
+voice step is where these are set (tur-settings' P@x pages are task D-19).
+The new state `setup-voice-small` (a 2-processor computer,
+`fixtures/voice/status/small.json`) is walked like the others.
+
 **P@x's indicator** draws *listening* already (`org.tur.PaxOverlay1.SetActivity`
 under a lease); the service takes that lease while the microphone is open
 (pax-voice.md, section 4). No change to `tur-pax-overlay` was needed.

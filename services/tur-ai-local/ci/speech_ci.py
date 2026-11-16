@@ -4,7 +4,8 @@
 
 docs/architecture/pax-voice.md; .github/workflows/pax-voice.yml.
 
-  clips      Downloads the default English and Italian voices with
+  clips      Downloads Piper (the engine, on first use: it is not in the
+             image) and the default English and Italian voices with
              `tur-ai-local speech ensure`, speaks TUR's own test sentences
              with `tur-ai-local speech tts` (Piper), and turns each into the
              16 kHz mono 16-bit WAVE file recognition takes. Writes
@@ -14,8 +15,9 @@ docs/architecture/pax-voice.md; .github/workflows/pax-voice.yml.
              recognises every clip in its own language with
              `tur-ai-local speech stt`, and records the transcript, the word
              error rate against the sentence, the wall time and the peak
-             memory of the recognition (tur-ai-local and whisper-cli, from
-             wait4). Writes EVIDENCE/speech-results.json.
+             memory of the recognition (tur-ai-local and whisper-cli or
+             parakeet-cli, from wait4). Parakeet's output format is not
+             documented: what tur-ai-local makes of it is recorded here. Writes EVIDENCE/speech-results.json.
   summary    A markdown table of the results.
 
 Only the standard library. Checks about TUR (a report that does not parse,
@@ -44,6 +46,8 @@ SENTENCES = [
 ]
 
 DEFAULT_VOICES = {"en": "voice-en-us-ljspeech-medium", "it": "voice-it-paola-medium"}
+# The engine the voices need, downloaded on first use (not in the image).
+PIPER = "piper-tts-1-8-0"
 VAD = "silero-vad-v6.2.0"
 
 
@@ -145,7 +149,7 @@ def clips(args):
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.evidence, exist_ok=True)
     env = environment(args.data, args.runtime)
-    ensure(args.tal, env, list(DEFAULT_VOICES.values()), args.evidence, "voices")
+    ensure(args.tal, env, [PIPER, *DEFAULT_VOICES.values()], args.evidence, "voices")
     manifest = []
     timings = []
     for index, (language, text) in enumerate(SENTENCES):
@@ -296,7 +300,7 @@ def main():
     commands.choices["recognise"].add_argument("--clips", required=True)
     commands.choices["recognise"].add_argument(
         "--models",
-        default="whisper-tiny-q5-1,whisper-base-q5-1,whisper-small-q5-1,whisper-large-v3-turbo-q5-0",
+        default="whisper-tiny-q5-1,whisper-base-q5-1,whisper-small-q5-1,whisper-large-v3-turbo-q5-0,parakeet-tdt-0-6b-v3-q4-k",
     )
     command = commands.add_parser("summary")
     command.add_argument("--evidence", required=True)

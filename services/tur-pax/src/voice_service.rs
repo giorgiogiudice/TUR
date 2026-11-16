@@ -28,11 +28,11 @@ use crate::livelist::{LOCAL_ENGINE, LiveEntry, LiveList};
 use crate::orchestrator::{LiveIo, SYSTEM_TEXT};
 use crate::registry::ToolRegistry;
 use crate::voice::{
-    Check, Effect, Heard, Indicator, Input, Interjection, Interjections,
+    Check, ECHO_SINK, ECHO_SOURCE, Effect, Heard, Indicator, Input, Interjection, Interjections,
     LEVEL_INTERVAL, MAX_TURN, Machine, Phase, SILENCE_ENDS_TURN, SPEAK_MAX_BYTES, Segmenter,
     Source, TranscriptGate, Trigger, VoiceSettings, WAKE_WORD_EXPLANATION,
-    WaitReason, complete_sentences, interjection, level, may_listen, state_details,
-    transcript_check,
+    WaitReason, complete_sentences, effective_language, interjection, level, may_listen,
+    state_details, system_language, transcript_check,
 };
 
 /// What a live engine is told beside P@x's fixed system text.
@@ -61,6 +61,35 @@ pub const DEFAULT_VOICES: &[(&str, &str)] = &[
 /// `installed`.
 fn installed(value: Option<&Value>) -> bool {
     matches!(value, Some(Value::Bool(true))) || value.and_then(Value::as_str) == Some("installed")
+}
+
+/// Every model local AI's recommendation names, by id: whether it is on
+/// this computer, and its download size.
+fn speech_offers(report: &Value) -> std::collections::HashMap<String, (bool, u64)> {
+    let mut found = std::collections::HashMap::new();
+    let mut add = |entry: &Value| {
+        if let Some(id) = text_at(entry, &["id"]) {
+            let bytes = entry
+                .get("download_bytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            found.insert(id.to_owned(), (installed(entry.get("installed")), bytes));
+        }
+    };
+    for single in ["recognition", "vad"] {
+        if let Some(entry) = report.get(single) {
+            add(entry);
+        }
+    }
+    for entry in recommended_voices(report) {
+        add(&entry);
+    }
+    for list in ["engines", "alternatives"] {
+        for entry in report.get(list).and_then(Value::as_array).into_iter().flatten() {
+            add(entry);
+        }
+    }
+    found
 }
 
 /// The voices of local AI's recommendation, as a list.
@@ -234,6 +263,21 @@ impl Core {
         lock(&self.voice.me).upgrade()
     }
 
+    /// The session's language, when P@x speaks it.
+    fn system_language(&self) -> Option<&'static str> {
+        self.parts.paths.locale.as_deref().and_then(system_language)
+    }
+
+    /// Where TUR's echo canceller is there, the microphone and the speaker
+    /// P@x uses: its two devices; otherwise the person's own.
+    fn echo_targets(&self) -> (Option<&'static str>, Option<&'static str>, bool) {
+        if sound_around(&self.parts.paths.sound.dump).echo_cancelled {
+            (Some(ECHO_SOURCE), Some(ECHO_SINK), true)
+        } else {
+            (None, None, false)
+        }
+    }
+
     /// The voice state in one word, for the property `Voice`.
     pub fn voice_name(&self) -> &'static str {
         self.voice_inner().machine.phase().name()
@@ -282,11 +326,15 @@ impl Core {
         let recognition = report.get("recognition").cloned().unwrap_or(Value::Null);
         let voice_activity = report.get("vad").cloned().unwrap_or(Value::Null);
         let voices = Value::Array(recommended_voices(&report));
+        let alternatives = report.get("alternatives").cloned().unwrap_or(json!([]));
+        let speech_engines = report.get("engines").cloned().unwrap_or(json!([]));
+        let system = self.system_language();
         let needed = report
             .get("download_bytes_needed")
             .and_then(Value::as_u64)
             .unwrap_or(0);
         let lists = LiveList::load(&self.parts.paths.live).unwrap_or_else(|_| LiveList::empty());
+        let mut suggestion: Option<(f64, Value)> = None;
         let mut engines = vec![json!({
             "id": LOCAL_ENGINE,
             "name": "On this computer",
@@ -304,7 +352,34 @@ impl Core {
                 Err(_) => "unknown",
             };
             engines.push(entry.to_json(settings.live_consent_current(&entry.id), key));
+            // With the person's key for a provider that has a live engine,
+            // its cheapest model is suggested, with its price; local stays
+            // the default (the owner's decision of 16 November 2026).
+            if key == "set" && entry.built {
+                for model in &entry.models {
+                    if let Some(minute) = entry.per_minute(model)
+                        && suggestion.as_ref().is_none_or(|(best, _)| minute < *best)
+                    {
+                        suggestion = Some((
+                            minute,
+                            json!({
+                                "engine": entry.id,
+                                "name": entry.name,
+                                "company": entry.company,
+                                "model": model.name,
+                                "price_per_minute": minute,
+                                "currency": model.prices.as_ref().map(|prices| prices.currency.clone()),
+                            }),
+                        ));
+                    }
+                }
+            }
         }
+        let suggestion = if settings.live.engine == LOCAL_ENGINE {
+            suggestion.map(|(_, value)| value)
+        } else {
+            None
+        };
         let around = sound_around(&self.parts.paths.sound.dump);
         json!({
             "enabled": settings.enabled,
@@ -312,11 +387,18 @@ impl Core {
             "microphone_open": phase.microphone_open(),
             "indicator": indicator.as_str(),
             "settings": settings,
+            "language": {
+                "setting": settings.language,
+                "system": system,
+                "effective": effective_language(&settings.language, system),
+            },
             "problem": problem.map(|problem| json!({
                 "error_code": problem.code.to_string(),
                 "message": problem.detail,
             })),
             "recognition": recognition,
+            "alternatives": alternatives,
+            "engines": speech_engines,
             "voice_activity": voice_activity,
             "synthesis": { "voices": voices },
             "download_bytes_needed": needed,
@@ -324,6 +406,7 @@ impl Core {
             "live": {
                 "available": settings.enabled && phase.name() != "off",
                 "engines": engines,
+                "suggestion": suggestion,
                 "as_of": lists.as_of,
             },
             "wake_word": {
@@ -417,6 +500,7 @@ impl Core {
             }
             inner.settings.language.clone()
         };
+        let language = effective_language(&language, self.system_language());
         let mut arguments = vec!["speech", "recommend", "--json"];
         if language != "auto" {
             arguments.extend(["--language", language.as_str()]);
@@ -514,6 +598,17 @@ impl Core {
                         ids.push(id.to_owned());
                     }
                 }
+                // Piper itself is downloaded on first use, with the voices.
+                for engine in report
+                    .get("engines")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(id) = text_at(engine, &["id"]) {
+                        ids.push(id.to_owned());
+                    }
+                }
                 ids
             }
         };
@@ -522,10 +617,26 @@ impl Core {
         if models.is_empty() {
             return Err(invalid("local AI named no speech model for this computer"));
         }
-        let needed = report
-            .get("download_bytes_needed")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
+        // What is downloaded: the recommendation's total, or, for models the
+        // person named, what of them is not on this computer yet.
+        let needed = if options.contains_key("models") {
+            let known = speech_offers(&report);
+            let mut total = 0u64;
+            for id in &models {
+                let Some((present, bytes)) = known.get(id.as_str()) else {
+                    return Err(invalid("a model named is not one local AI offers"));
+                };
+                if !present {
+                    total = total.saturating_add(*bytes);
+                }
+            }
+            total
+        } else {
+            report
+                .get("download_bytes_needed")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+        };
         if needed > 0 && options.get("download_bytes").and_then(Value::as_u64) != Some(needed) {
             return Err(invalid(format!(
                 "this downloads {needed} bytes from the models' publishers; say download_bytes \
@@ -793,8 +904,10 @@ impl Core {
     ) -> Result<Microphone, Fault> {
         let me = lock(&self.voice.me).clone();
         let turn = turn.to_owned();
+        let (source, _, _) = self.echo_targets();
         Microphone::open(
             &self.parts.paths.sound.record,
+            source,
             Box::new(move |loudness| {
                 if loudness >= 0.06
                     && let Some(activity) = &activity
@@ -922,7 +1035,8 @@ impl Core {
 
     fn recognise(&self, samples: &[i16]) -> Result<Transcript, Fault> {
         let model = self.recognition_model()?;
-        let language = self.voice_inner().settings.language.clone();
+        let setting = self.voice_inner().settings.language.clone();
+        let language = effective_language(&setting, self.system_language());
         let runtime = self
             .parts
             .paths
@@ -1149,11 +1263,13 @@ impl Core {
     }
 
     fn speaking_language(&self) -> String {
+        let system = self.system_language();
         let inner = self.voice_inner();
         if inner.settings.language == "auto" {
             inner
                 .spoken_language
                 .clone()
+                .or_else(|| system.map(str::to_owned))
                 .unwrap_or_else(|| "en".to_owned())
         } else {
             inner.settings.language.clone()
@@ -1200,7 +1316,8 @@ impl Core {
             return;
         }
         self.voice_changed(None);
-        if let Ok(mut speaker) = Speaker::start(&self.parts.paths.sound.play, rate) {
+        let (_, sink, _) = self.echo_targets();
+        if let Ok(mut speaker) = Speaker::start(&self.parts.paths.sound.play, rate, sink) {
             speaker.write(&samples);
             speaker.finish();
             *lock(&self.voice.speaker) = Some(speaker);
@@ -1482,7 +1599,7 @@ impl Core {
                 return;
             }
         };
-        let echo_cancelled = sound_around(&self.parts.paths.sound.dump).echo_cancelled;
+        let (_, _, echo_cancelled) = self.echo_targets();
         let mut segmenter = Segmenter::new();
         let mut last_voice = Instant::now();
         let mut reason = "person";
@@ -1621,7 +1738,7 @@ impl Core {
             detail: error.to_string(),
         })?;
         let microphone = self.open_microphone(&live.session, None)?;
-        let echo_cancelled = sound_around(&self.parts.paths.sound.dump).echo_cancelled;
+        let (_, sink, echo_cancelled) = self.echo_targets();
         Ok((
             session,
             ServiceLiveIo {
@@ -1629,6 +1746,7 @@ impl Core {
                 session: live.session.clone(),
                 microphone,
                 speaker: None,
+                sink,
                 rate: 0,
                 until: Instant::now(),
                 echo_cancelled,
@@ -1728,6 +1846,8 @@ pub(super) struct ServiceLiveIo<'c> {
     session: String,
     microphone: Microphone,
     speaker: Option<Speaker>,
+    /// The speaker P@x plays into: the echo canceller's when it is there.
+    sink: Option<&'static str>,
     rate: u32,
     /// Until when P@x's voice is heard, from what was written.
     until: Instant,
@@ -1762,7 +1882,7 @@ impl LiveIo for ServiceLiveIo<'_> {
             if let Some(old) = self.speaker.take() {
                 old.stop();
             }
-            self.speaker = Speaker::start(&self.core.parts.paths.sound.play, rate).ok();
+            self.speaker = Speaker::start(&self.core.parts.paths.sound.play, rate, self.sink).ok();
             self.rate = rate;
         }
         if let Some(speaker) = self.speaker.as_mut() {

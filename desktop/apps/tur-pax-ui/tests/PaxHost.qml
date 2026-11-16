@@ -70,7 +70,10 @@ Item {
         { name: "ask-transcript-wait", view: "bar", status: "ready", voice: "ready", voiceTurn: "wait", listen: "wait" },
         { name: "live", view: "panel", status: "ready", voice: "ready", live: true },
         { name: "setup-voice", view: "setup", status: "ready", voice: "off", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" },
-        { name: "setup-voice-live", view: "setup", status: "ready", voice: "off", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5", chooseLive: "openai-realtime" }
+        { name: "setup-voice-live", view: "setup", status: "ready", voice: "off", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5", chooseLive: "openai-realtime" },
+        // A 2-processor computer: Whisper tiny, weak in Italian, said
+        // plainly, with better models offered (fixtures/voice/status/small).
+        { name: "setup-voice-small", view: "setup", status: "ready", voice: "small", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" }
     ]
 
     // What was asked in each recorded task (fixtures/agent1/tasks), so that
@@ -216,7 +219,7 @@ Item {
         test.wait(30)
 
         if (state.voice)
-            test.tryVerify(() => host.client.voice === (state.voice === "off" ? "off" : state.voice), 10000,
+            test.tryVerify(() => host.client.voice === (state.voice === "off" || state.voice === "small" ? "off" : state.voice), 10000,
                            "the voice status was read")
         if (state.view === "setup") {
             host.reachSetup(state, test)

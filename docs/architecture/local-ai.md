@@ -429,26 +429,58 @@ it has run**: GitHub Actions is disabled for the owner's account.
   `/usr/share/tur/ai-local/speech/`: four Whisper models in ggml form
   (`whisper-tiny-q5-1`, `whisper-base-q5-1`, `whisper-small-q5-1`,
   `whisper-large-v3-turbo-q5-0`; MIT), the Silero voice detector
-  (`silero-vad-v6.2.0`; MIT) and six Piper voices whose licences are clean
+  (`silero-vad-v6.2.0`; MIT), six Piper voices whose licences are clean
   through their whole training chain (English, Italian, German, Spanish,
-  French). Every file is pinned to a commit of its publisher's repository
-  with its size and SHA-256, as for models; nothing is in the image.
+  French), **Parakeet TDT 0.6B v3** (`parakeet-tdt-0-6b-v3-q4-k`, CC BY 4.0,
+  25 European languages, Italian FLEURS WER 3.0: an optional recogniser,
+  never recommended, offered with its credit), and **Piper itself**
+  (`piper-tts-1-8-0`, kind `engine`). Every model and voice file is pinned to
+  a commit of its publisher's repository with its size and SHA-256, as for
+  models; Piper's wheel, which has no commit, is pinned by its SHA-256 on the
+  Python Package Index, with its source archive pinned for the GPL's offer
+  of source. Nothing is in the image.
 - **Tiers** as for models (*runs well*, *slow*, *does not fit*) with reasons
   in words; for recognition, from a published encode time scaled to this
-  processor (pax-voice.md, 3.3). Every voice runs well everywhere.
+  processor (pax-voice.md, 3.3); Parakeet's figure is an estimate with no
+  published basis. Every voice runs well everywhere. `recommend` picks only
+  whisper.cpp's models; it says when the model it picks is weak in a
+  language (`weak_in`: a published FLEURS word error rate above 20 %, which
+  only Italian figures can show) with a plain `warning` naming the smallest
+  better model ("Whisper tiny understands Italian poorly. Whisper base
+  (60 MB) understands it much better, but is slow on this computer."), and
+  lists every other model this computer can hold under `alternatives`, the
+  best in Italian first, Parakeet included with its credit (the owner's
+  decisions 4 and 10 of 16 November 2026).
 - **Commands** (`tur-ai-local speech …`, JSON with `--json`,
   `schemas/ai-local-speech.schema.json`): `models`, `recommend`, `ensure`
   (the same checked, resumable download as `ensure`, with
   `speech-ensure-event` lines), `cancel`, `remove`, `stt FILE --model ID
   [--language L] [--vad]` (a 16 kHz mono 16-bit WAVE file to whisper.cpp's
-  `whisper-cli`, environment cleared) and `tts --voice ID --output FILE`
-  (text on standard input to Piper). Codes `TUR-AI-LOCAL-030` to `-035`.
+  `whisper-cli`, environment cleared; for Parakeet to its `parakeet-cli`,
+  which takes no language and no voice detector, and whose output, not
+  documented, is cleaned of its progress lines and checked by the
+  `pax-voice` workflow) and `tts --voice ID --output FILE` (text on standard
+  input to Piper: the installed engine's launcher unless `--piper` names
+  another; without it `TUR-AI-LOCAL-030`, "run tur-ai-local speech ensure
+  piper-tts-1-8-0"). Codes `TUR-AI-LOCAL-030` to `-035`.
+- **Piper on first use** (the owner's decision 11 of 16 November 2026):
+  `speech ensure piper-tts-1-8-0` downloads the wheel (34 MB), checks its
+  size and SHA-256, makes a virtual environment with `python3 -m venv
+  --without-pip --system-site-packages` (Python at `/usr/bin/python3`, or
+  `--python`), unpacks the wheel into it with Python's own `zipfile`, and
+  writes a launcher `piper` beside it; the record of verification is
+  written only when all of that succeeded, and an engine without its
+  launcher counts as damaged. The image carries only Piper's non-GPL
+  dependencies, Fedora's `python3-onnxruntime` and `python3-pathvalidate`.
+  `recommend` lists the engine under `engines` and counts it in
+  `download_bytes_needed` whenever voices are recommended.
 - **The store**: `<models folder>/speech/<id>/` with its record of
   verification; the models listing does not count that folder as an unknown
   model.
-- **The engines** are separate programs: whisper.cpp v1.9.5's `whisper-cli`,
-  built from source in the image like llama.cpp, and Piper 1.8.0 (a GPL
-  program) from its pinned wheel (image/README.md, "Speech").
+- **The engines** are separate programs: whisper.cpp v1.9.5's `whisper-cli`
+  and `parakeet-cli`, built from source in the image like llama.cpp, and
+  Piper 1.8.0 (a GPL program), downloaded on first use from its pinned wheel
+  (image/README.md, "Speech").
   `tur-ai-local` opens no microphone and plays nothing; P@x's service does.
 - **Tests**: `tests/speech.rs` (catalogue rules, tiers on the recorded
   machines, the command lines and reports with stand-in engines); the

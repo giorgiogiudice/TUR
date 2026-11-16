@@ -5,6 +5,12 @@
 # (image/engine/piper.sh; image/README.md, "Speech";
 # docs/architecture/pax-voice.md, section 3.2).
 #
+# NOT installed in the image (the owner's decision of 16 November 2026): the
+# wheel is downloaded on first use by tur-ai-local, from the entry
+# services/tur-ai-local/speech/piper-tts-1-8-0.toml, which carries the same
+# pins. This file is the record of them; services/tur-ai-local/tests/speech.rs
+# fails if the two differ. The image installs only PIPER_FEDORA_PACKAGES.
+#
 # Fedora 45's python3-piper-tts is 1.4.2, which cannot load the voices
 # retrained in November 2026 ("Requires Piper 1.5 or higher"), so TUR
 # installs the release wheel from PyPI, checked against the SHA-256 PyPI

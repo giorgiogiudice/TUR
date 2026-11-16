@@ -79,9 +79,15 @@ QtObject {
     readonly property string voiceRecognition: qsTr("Recognising what you say")
     readonly property string voiceVoices: qsTr("P@x's voice")
     readonly property string voiceLanguage: qsTr("Language")
-    readonly property string voiceAutomatic: qsTr("The language I speak (found automatically)")
+    readonly property string voiceAutomatic: qsTr("Same as the system")
+    readonly property string voiceDetected: qsTr("Detected automatically")
     readonly property string voiceAnswersAloud: qsTr("P@x answers out loud")
-    readonly property string voiceAnswersAloudText: qsTr("Off: P@x's answers are written. On: they are also spoken in the local voice.")
+    readonly property string voiceAnswersAloudText: qsTr("Off: P@x's answers are written. On: they are also spoken, in a voice on this computer.")
+    readonly property string voiceAlwaysWait: qsTr("Always wait for me to press Send")
+    readonly property string voiceAlwaysWaitText: qsTr("P@x shows what it heard for 2 seconds before it changes anything. Turn this on to send every spoken request yourself.")
+    readonly property string voiceRecognitionChoice: qsTr("Choose how P@x understands you")
+    readonly property string voiceRecommended: qsTr("Recommended for this computer")
+    readonly property string voiceEngines: qsTr("Programs it uses")
     readonly property string voiceHow: qsTr("Hold P@x's key and speak; let go to send. Or press the microphone in the bar. The microphone is open only while P@x shows that it listens.")
     readonly property string liveTitle: qsTr("Live conversation")
     readonly property string liveText: qsTr("Talk with P@x while it works: it says what it is doing, and you can interrupt it or change what you asked. The microphone stays on until you end the conversation, or until a while of silence.")
@@ -92,6 +98,71 @@ QtObject {
     readonly property string voiceNotNow: qsTr("Not now")
     readonly property string voiceReady: qsTr("Voice is ready.")
     readonly property string wakeWordOff: qsTr("P@x does not listen for a wake word. It listens only while you hold its key or press the microphone.")
+
+    // The language P@x speaks and listens in, said once: the system's when
+    // the setting follows it and P@x speaks it, otherwise detected.
+    function voiceLanguageLine(language: var): string {
+        const given = language || {}
+        if (String(given.setting || "auto") !== "auto")
+            return qsTr("Language: %1").arg(words.languageName(String(given.setting)))
+        if (given.system)
+            return qsTr("Language: follows your system (%1)").arg(words.languageEndonym(String(given.system)))
+        return qsTr("Language: %1").arg(words.voiceDetected)
+    }
+
+    function languageName(code: string): string {
+        switch (code) {
+        case "en":
+            return qsTr("English")
+        case "it":
+            return qsTr("Italian")
+        case "de":
+            return qsTr("German")
+        case "es":
+            return qsTr("Spanish")
+        case "fr":
+            return qsTr("French")
+        default:
+            return code
+        }
+    }
+
+    // A language in its own words, as the system names it to the person.
+    function languageEndonym(code: string): string {
+        switch (code) {
+        case "en":
+            return "English"
+        case "it":
+            return "Italiano"
+        case "de":
+            return "Deutsch"
+        case "es":
+            return "Español"
+        case "fr":
+            return "Français"
+        default:
+            return code
+        }
+    }
+
+    // A program the voice runs, with its licence: Piper is GPL and runs as
+    // a separate program.
+    function voiceEngine(engine: var): string {
+        const licence = (engine.licence || {}).id || ""
+        return qsTr("%1, %2, runs as a separate program").arg(String(engine.name || engine.id || "")).arg(String(licence))
+    }
+
+    // A provider's live engine suggested because the person has its key.
+    function liveSuggestion(suggestion: var): string {
+        const company = String(suggestion.company || suggestion.name || "")
+        return qsTr("%1: %2, about %3 a minute, paid with your own key · your voice is sent to %1")
+            .arg(company).arg(String(suggestion.model || ""))
+            .arg(words.money(suggestion.price_per_minute, String(suggestion.currency || "")))
+    }
+
+    function liveSuggested(company: string): string {
+        return qsTr("Suggested because you have a key for %1").arg(company)
+    }
 
     function voiceSentTo(company: string): string {
         return qsTr("Your voice is sent to %1 while the conversation runs.").arg(company)

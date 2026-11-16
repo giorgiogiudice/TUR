@@ -2380,6 +2380,20 @@ fn a_provider_s_live_engine_needs_consent_that_names_the_company() {
             .as_str()
             .is_some_and(|text| text.contains("streamed to OpenAI"))
     );
+    // Without a key nothing is suggested; with the person's OpenAI key, its
+    // cheapest live model is, with its price. Local stays in use.
+    assert_eq!(status["live"]["suggestion"], Value::Null);
+    world.keys.set("openai", KEY).expect("a key");
+    let status = world.core.voice_status();
+    let suggestion = &status["live"]["suggestion"];
+    assert_eq!(suggestion["engine"], "openai-realtime");
+    assert_eq!(suggestion["model"], "gpt-realtime-2.1-mini");
+    assert_eq!(suggestion["currency"], "USD");
+    let minute = suggestion["price_per_minute"].as_f64().expect("a price");
+    assert!((minute - 0.03).abs() < 1e-9, "{minute}");
+    assert_eq!(status["settings"]["live"]["engine"], "local");
+    // The language follows the system's when the person chose none.
+    assert_eq!(status["language"]["setting"], "auto");
     world
         .core
         .set_voice_settings(r#"{"live": {"engine": "openai-realtime"}, "live_consent_version": "1"}"#)

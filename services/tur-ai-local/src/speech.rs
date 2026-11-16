@@ -17,7 +17,15 @@
 //! * **Recognition**: a 16 kHz mono 16-bit WAVE file given to whisper.cpp's
 //!   `whisper-cli`, once per utterance, with its environment cleared.
 //! * **Synthesis**: a text given to Piper (piper1-gpl), a GPL program run as
-//!   a child process; TUR links nothing of it.
+//!   a child process; TUR links nothing of it. Piper is not in the image: it
+//!   is an entry of kind `engine` of the catalogue, its wheel downloaded on
+//!   first use with the voices, checked by size and SHA-256 like a model,
+//!   and installed in a private virtual environment of the speech store
+//!   ([`install_engine`]). Its source archive is pinned in the same entry,
+//!   for the offer of source the GPL asks for.
+//! * **Parakeet** (NVIDIA's Parakeet TDT 0.6B v3, CC BY 4.0) is an optional
+//!   recognition model run by whisper.cpp's `parakeet-cli`; it is never
+//!   recommended, only offered beside the recommendation.
 //!
 //! Nothing here opens a microphone or plays a sound: P@x's service does
 //! that and gives this program files. Nothing is downloaded unless a person
@@ -50,8 +58,29 @@ pub const SPEECH_FOLDER: &str = "speech";
 /// whisper.cpp's command-line recogniser, as TUR's image installs it.
 pub const DEFAULT_WHISPER_CLI: &str = "/usr/libexec/tur/whisper.cpp/whisper-cli";
 
-/// Piper's command, the console script of its virtual environment.
-pub const DEFAULT_PIPER: &str = "/usr/libexec/tur/piper/bin/piper";
+/// whisper.cpp's Parakeet recogniser, as TUR's image installs it.
+pub const DEFAULT_PARAKEET_CLI: &str = "/usr/libexec/tur/whisper.cpp/parakeet-cli";
+
+/// The Python that runs Piper's virtual environment.
+pub const DEFAULT_PYTHON: &str = "/usr/bin/python3";
+
+/// The launcher an installed Piper engine has in its folder of the speech
+/// store.
+pub const ENGINE_LAUNCHER: &str = "piper";
+
+/// The virtual environment of an installed engine, in its folder.
+pub const ENGINE_VENV: &str = "venv";
+
+/// Where an engine's wheel and source archive must come from: the Python
+/// Package Index's file host.
+pub const PYPI_FILES: &str = "https://files.pythonhosted.org/";
+
+/// How long installing an engine may take.
+pub const INSTALL_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// A published Italian FLEURS word error rate above this, in percent, makes
+/// a recognition model weak in Italian.
+pub const WEAK_WER_PERCENT: f64 = 20.0;
 
 /// The format version of a speech entry.
 pub const SPEECH_ENTRY_VERSION: u32 = 1;
@@ -92,6 +121,8 @@ pub enum SpeechKind {
     Synthesis,
     /// Finds where speech is in a recording.
     VoiceActivity,
+    /// A program downloaded on first use: Piper.
+    Engine,
 }
 
 impl SpeechKind {
@@ -101,6 +132,7 @@ impl SpeechKind {
             SpeechKind::Recognition => "recognition",
             SpeechKind::Synthesis => "synthesis",
             SpeechKind::VoiceActivity => "voice-activity",
+            SpeechKind::Engine => "engine",
         }
     }
 }
@@ -114,6 +146,9 @@ pub enum SpeechEngine {
     /// Piper (piper1-gpl).
     #[serde(rename = "piper")]
     Piper,
+    /// whisper.cpp's `parakeet-cli`, for NVIDIA's Parakeet models.
+    #[serde(rename = "parakeet")]
+    Parakeet,
 }
 
 /// Who speaks in a voice.
@@ -146,7 +181,9 @@ pub struct SpeechEntry {
     pub engine: SpeechEngine,
     /// The publisher's repository.
     pub repository: String,
-    /// The commit of that repository the URLs are pinned to.
+    /// The commit of that repository the URLs are pinned to; for an engine
+    /// from the Python Package Index, its release (the files are pinned by
+    /// their digests).
     pub revision: String,
     /// Its size, as the publisher states it.
     pub parameters: String,
@@ -183,6 +220,12 @@ pub struct SpeechEntry {
     pub files: Vec<ModelFile>,
     /// The licence, followed through every base the voice was trained from.
     pub licence: Licence,
+    /// An engine's source archive, offered with it as the GPL asks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    /// The SHA-256 of that archive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sha256: Option<String>,
 }
 
 impl SpeechEntry {
@@ -200,6 +243,7 @@ impl SpeechEntry {
                     || self.languages.iter().any(|offered| offered == language)
             }
             SpeechKind::Synthesis => self.languages.iter().any(|offered| offered == language),
+            SpeechKind::Engine => true,
         }
     }
 
@@ -211,6 +255,18 @@ impl SpeechEntry {
     /// Whether credit must be shown with it.
     pub fn needs_credit(&self) -> bool {
         self.credit.trim() != "none"
+    }
+
+    /// The offered languages it is weak in: those whose published FLEURS
+    /// word error rate is above [`WEAK_WER_PERCENT`]. Only Italian figures
+    /// are recorded, so only Italian can be named.
+    pub fn weak_in(&self) -> Vec<&'static str> {
+        match self.wer_it_fleurs {
+            Some(wer) if self.kind == SpeechKind::Recognition && wer > WEAK_WER_PERCENT => {
+                vec!["it"]
+            }
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -232,6 +288,12 @@ impl SpeechCatalogue {
     /// The entries of one kind.
     pub fn of_kind(&self, kind: SpeechKind) -> impl Iterator<Item = &SpeechEntry> {
         self.entries.iter().filter(move |entry| entry.kind == kind)
+    }
+
+    /// The engine voices are spoken with: Piper.
+    pub fn voice_engine(&self) -> Option<&SpeechEntry> {
+        self.of_kind(SpeechKind::Engine)
+            .find(|entry| entry.engine == SpeechEngine::Piper)
     }
 
     /// The default voice of a language.
@@ -389,10 +451,41 @@ pub fn check_speech_entry(file_name: &str, entry: &SpeechEntry) -> Vec<String> {
     if !entry.repository.starts_with("https://") {
         problems.push(format!("{id}: the repository is not https"));
     }
-    if !is_lower_hex(&entry.revision, 40) {
-        problems.push(format!(
-            "{id}: the revision is not a 40-digit lower-case commit"
-        ));
+    let engine = entry.kind == SpeechKind::Engine;
+    if engine {
+        // A wheel of the Python Package Index is not in a repository with
+        // commits: it is pinned by its digest, and its source archive with
+        // it.
+        if entry.revision.trim().is_empty() {
+            problems.push(format!("{id}: the release is empty"));
+        }
+        match (&entry.source_url, &entry.source_sha256) {
+            (Some(url), Some(sha256)) => {
+                if !url.starts_with(PYPI_FILES) || !url.ends_with(".tar.gz") {
+                    problems.push(format!(
+                        "{id}: the source archive is not a .tar.gz under {PYPI_FILES}"
+                    ));
+                }
+                if !is_lower_hex(sha256, 64) {
+                    problems.push(format!(
+                        "{id}: the source archive's sha256 is not 64 lower-case hexadecimal digits"
+                    ));
+                }
+            }
+            _ => problems.push(format!(
+                "{id}: an engine names its source archive and its sha256 (source_url, \
+                 source_sha256)"
+            )),
+        }
+    } else {
+        if !is_lower_hex(&entry.revision, 40) {
+            problems.push(format!(
+                "{id}: the revision is not a 40-digit lower-case commit"
+            ));
+        }
+        if entry.source_url.is_some() || entry.source_sha256.is_some() {
+            problems.push(format!("{id}: only an engine names a source archive"));
+        }
     }
     if entry.files.is_empty() {
         problems.push(format!("{id}: no files"));
@@ -404,7 +497,11 @@ pub fn check_speech_entry(file_name: &str, entry: &SpeechEntry) -> Vec<String> {
         if !file.url.starts_with("https://") {
             problems.push(format!("{id}: {} URL is not https", file.name));
         }
-        if !file.url.contains(&format!("/{}/", entry.revision)) {
+        if engine {
+            if !file.url.starts_with(PYPI_FILES) {
+                problems.push(format!("{id}: {} is not under {PYPI_FILES}", file.name));
+            }
+        } else if !file.url.contains(&format!("/{}/", entry.revision)) {
             problems.push(format!(
                 "{id}: {} URL is not pinned to revision {}",
                 file.name, entry.revision
@@ -466,8 +563,10 @@ pub fn check_speech_entry(file_name: &str, entry: &SpeechEntry) -> Vec<String> {
     }
     match entry.kind {
         SpeechKind::Recognition => {
-            if entry.engine != SpeechEngine::WhisperCpp {
-                problems.push(format!("{id}: a recognition model is used by whisper.cpp"));
+            if !matches!(entry.engine, SpeechEngine::WhisperCpp | SpeechEngine::Parakeet) {
+                problems.push(format!(
+                    "{id}: a recognition model is used by whisper.cpp or its parakeet-cli"
+                ));
             }
             if entry.encode_ms_8_threads.is_none_or(|ms| ms == 0) {
                 problems.push(format!("{id}: a recognition model needs encode_ms_8_threads"));
@@ -523,6 +622,24 @@ pub fn check_speech_entry(file_name: &str, entry: &SpeechEntry) -> Vec<String> {
             }
             if entry.languages.len() != 1 || entry.languages[0] == "mul" {
                 problems.push(format!("{id}: a voice speaks one language"));
+            }
+        }
+        SpeechKind::Engine => {
+            if entry.engine != SpeechEngine::Piper {
+                problems.push(format!("{id}: the only engine downloaded on first use is Piper"));
+            }
+            if entry.files.len() != 1 || !entry.files[0].name.ends_with(".whl") {
+                problems.push(format!("{id}: an engine is one Python wheel"));
+            }
+            if entry.voice.is_some()
+                || entry.sample_rate.is_some()
+                || !entry.default_for.is_empty()
+                || entry.encode_ms_8_threads.is_some()
+            {
+                problems.push(format!(
+                    "{id}: voice, sample_rate, default_for and encode_ms_8_threads are not for an \
+                     engine"
+                ));
             }
         }
     }
@@ -662,6 +779,16 @@ pub fn speech_tier(entry: &SpeechEntry, hardware: &Hardware) -> TierJudgement {
                 expected_ms: None,
             }
         }
+        SpeechKind::Engine => {
+            reasons.push(
+                "It is the program that speaks the voices; every voice needs it.".to_owned(),
+            );
+            TierJudgement {
+                tier: SpeechTier::RunsWell,
+                reasons,
+                expected_ms: None,
+            }
+        }
     }
 }
 
@@ -674,6 +801,47 @@ pub struct SpeechRecommendation<'a> {
     pub vad: Option<&'a SpeechEntry>,
     /// The voice of each language, in [`OFFERED_LANGUAGES`] order.
     pub voices: Vec<(String, &'a SpeechEntry)>,
+    /// Every other recognition model this computer can hold (it runs well
+    /// or is slow), the best in Italian first: Parakeet among them, which is
+    /// never recommended but may be chosen.
+    pub alternatives: Vec<(&'a SpeechEntry, TierJudgement)>,
+    /// The engine the voices need (Piper).
+    pub engine: Option<&'a SpeechEntry>,
+}
+
+impl SpeechRecommendation<'_> {
+    /// When the recommended model is weak in Italian and Italian may be
+    /// spoken (the language asked is `it` or `auto`), a plain sentence that
+    /// says so and names the smallest alternative that is not weak.
+    pub fn warning(&self, language: Option<&str>) -> Option<String> {
+        let (chosen, _) = self.recognition.as_ref()?;
+        if !matches!(language.unwrap_or("auto"), "it" | "auto") || chosen.weak_in().is_empty() {
+            return None;
+        }
+        let better = self
+            .alternatives
+            .iter()
+            .filter(|(entry, _)| entry.engine == SpeechEngine::WhisperCpp)
+            .filter(|(entry, _)| entry.wer_it_fleurs.is_some_and(|wer| wer <= WEAK_WER_PERCENT))
+            .min_by_key(|(entry, _)| entry.memory_bytes);
+        Some(match better {
+            Some((entry, judgement)) => format!(
+                "{} understands Italian poorly. {} ({}) understands it much better{}.",
+                chosen.name,
+                entry.name,
+                crate::human_bytes(entry.download_bytes()),
+                if judgement.tier == SpeechTier::Slow {
+                    ", but is slow on this computer"
+                } else {
+                    ""
+                }
+            ),
+            None => format!(
+                "{} understands Italian poorly, and no better model fits this computer.",
+                chosen.name
+            ),
+        })
+    }
 }
 
 /// The recognition model that suits this computer best: of those that run
@@ -686,8 +854,11 @@ pub fn recommend<'a>(
     language: Option<&str>,
 ) -> SpeechRecommendation<'a> {
     let wanted = language.unwrap_or("auto");
+    // Only whisper.cpp's models are recommended: Parakeet is offered as an
+    // alternative the person chooses.
     let judged: Vec<(&SpeechEntry, TierJudgement)> = catalogue
         .of_kind(SpeechKind::Recognition)
+        .filter(|entry| entry.engine == SpeechEngine::WhisperCpp)
         .filter(|entry| entry.offers_language(wanted))
         .map(|entry| (entry, speech_tier(entry, hardware)))
         .collect();
@@ -719,10 +890,33 @@ pub fn recommend<'a>(
                 .map(|voice| (language.to_owned(), voice))
         })
         .collect();
+    let chosen_id = recognition.as_ref().map(|(entry, _)| entry.id.clone());
+    let mut alternatives: Vec<(&SpeechEntry, TierJudgement)> = catalogue
+        .of_kind(SpeechKind::Recognition)
+        .filter(|entry| entry.offers_language(wanted))
+        .filter(|entry| Some(&entry.id) != chosen_id.as_ref())
+        .map(|entry| (entry, speech_tier(entry, hardware)))
+        .filter(|(_, judgement)| judgement.tier != SpeechTier::DoesNotFit)
+        .collect();
+    // The best in Italian first; a model with no published figure last,
+    // smallest first among those.
+    alternatives.sort_by(|(left, _), (right, _)| {
+        let key = |entry: &SpeechEntry| entry.wer_it_fleurs.unwrap_or(f64::MAX);
+        key(*left)
+            .total_cmp(&key(*right))
+            .then(left.memory_bytes.cmp(&right.memory_bytes))
+    });
+    let engine = if voices.is_empty() {
+        None
+    } else {
+        catalogue.voice_engine()
+    };
     SpeechRecommendation {
         recognition,
         vad,
         voices,
+        alternatives,
+        engine,
     }
 }
 
@@ -816,7 +1010,24 @@ impl SpeechStore {
                 }
             }
         }
+        if entry.kind == SpeechKind::Engine {
+            let launcher = dir.join(ENGINE_LAUNCHER);
+            let python = dir.join(ENGINE_VENV).join("bin").join("python3");
+            if !launcher.is_file() || !python.exists() {
+                return (
+                    InstallState::Damaged,
+                    Some("the engine was downloaded but not installed".to_owned()),
+                );
+            }
+        }
         (InstallState::Installed, None)
+    }
+
+    /// The launcher of an installed engine.
+    pub fn launcher(&self, entry: &SpeechEntry) -> Option<PathBuf> {
+        (entry.kind == SpeechKind::Engine && self.is_installed(entry))
+            .then(|| self.dir(&entry.id).map(|dir| dir.join(ENGINE_LAUNCHER)))
+            .flatten()
     }
 
     /// Whether an entry is installed.
@@ -946,6 +1157,7 @@ pub fn fetch_speech(
     store: &SpeechStore,
     entry: &SpeechEntry,
     options: &FetchOptions<'_>,
+    python: &Path,
     emit: &mut dyn FnMut(SpeechEnsureEvent),
 ) -> Result<(), EnsureError> {
     let storage = |path: &Path, error: &io::Error| {
@@ -1097,6 +1309,11 @@ pub fn fetch_speech(
         verified.bytes_total = Some(total);
         emit(verified);
     }
+    if entry.kind == SpeechKind::Engine {
+        let wheel = dir.join(&entry.files[0].name);
+        install_engine(python, &dir, &wheel)
+            .map_err(|(code, detail)| EnsureError::new(code, detail))?;
+    }
     store
         .write_verified(entry, store::now_seconds())
         .map_err(|error| storage(&dir, &error))?;
@@ -1110,6 +1327,109 @@ pub fn fetch_speech(
     installed.bytes_total = Some(total);
     emit(installed);
     Ok(())
+}
+
+/// Install an engine whose wheel was checked: a virtual environment that
+/// sees the system's Python packages (Fedora's onnxruntime and pathvalidate,
+/// Piper's non-GPL dependencies, are in the image), the wheel unpacked into
+/// it with Python's own `zipfile`, and a launcher `<dir>/piper`. Nothing is
+/// fetched here; the wheel is the file already checked.
+///
+/// # Errors
+///
+/// `TUR-AI-LOCAL-030` when Python is missing or a step failed; `-011` when
+/// the launcher cannot be written.
+pub fn install_engine(python: &Path, dir: &Path, wheel: &Path) -> Result<(), (AiLocalCode, String)> {
+    let missing = |detail: String| (AiLocalCode::SpeechEngineMissing, detail);
+    if !python.is_file() {
+        return Err(missing(format!("{} is not there", python.display())));
+    }
+    let text_of = |path: &Path| path.to_string_lossy().into_owned();
+    if text_of(dir).contains('\'') {
+        return Err(missing(format!(
+            "{} holds a quote, which the launcher cannot name",
+            dir.display()
+        )));
+    }
+    let venv = dir.join(ENGINE_VENV);
+    let _ = fs::remove_dir_all(&venv);
+    let step = |program: &Path,
+                arguments: Vec<String>,
+                what: &str|
+     -> Result<ProgramOutput, (AiLocalCode, String)> {
+        let output = run_program(
+            program,
+            &arguments,
+            &[("LANG", "C.UTF-8")],
+            None,
+            INSTALL_TIMEOUT,
+        )
+        .map_err(|error| missing(format!("{}: {error}", program.display())))?;
+        if output.timed_out || output.status != Some(0) {
+            return Err(missing(failure_detail(&output, what)));
+        }
+        Ok(output)
+    };
+    step(
+        python,
+        vec![
+            "-m".to_owned(),
+            "venv".to_owned(),
+            "--without-pip".to_owned(),
+            "--system-site-packages".to_owned(),
+            text_of(&venv),
+        ],
+        "python3 -m venv",
+    )?;
+    let venv_python = venv.join("bin").join("python3");
+    let output = step(
+        &venv_python,
+        vec![
+            "-I".to_owned(),
+            "-c".to_owned(),
+            "import sysconfig;print(sysconfig.get_paths()['purelib'])".to_owned(),
+        ],
+        "the virtual environment's python3",
+    )?;
+    let site = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    if !site.starts_with(&venv) {
+        return Err(missing(format!(
+            "the virtual environment's packages are at {}, outside {}",
+            site.display(),
+            venv.display()
+        )));
+    }
+    fs::create_dir_all(&site).map_err(|error| missing(format!("{}: {error}", site.display())))?;
+    step(
+        &venv_python,
+        vec![
+            "-I".to_owned(),
+            "-m".to_owned(),
+            "zipfile".to_owned(),
+            "-e".to_owned(),
+            text_of(wheel),
+            text_of(&site),
+        ],
+        "python3 -m zipfile",
+    )?;
+    let launcher = dir.join(ENGINE_LAUNCHER);
+    let script = format!(
+        "#!/bin/sh\n# Piper, installed by tur-ai-local from its checked wheel.\nexec '{}' -m piper \"$@\"\n",
+        text_of(&venv_python)
+    );
+    let write = || -> io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let temporary = dir.join(format!("{ENGINE_LAUNCHER}{PART_SUFFIX}"));
+        fs::write(&temporary, script.as_bytes())?;
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o755))?;
+        fs::rename(&temporary, &launcher)
+    };
+    write().map_err(|error| {
+        (
+            AiLocalCode::StorageFailed,
+            format!("{}: {error}", launcher.display()),
+        )
+    })
 }
 
 // ------------------------------------------------------------------- audio
@@ -1417,10 +1737,38 @@ pub fn clean_transcript(text: &str) -> String {
     words.join(" ")
 }
 
+/// What parakeet-cli printed, without its progress lines.
+///
+/// parakeet-cli's output is not documented: its README shows progress lines
+/// ("Processing audio (176000 samples, 11.00 seconds)", "parakeet_decode:
+/// …") and then the transcript. Lines that look like progress or a ggml
+/// message are dropped, the rest joined. The `pax-voice` workflow checks
+/// this against the real program.
+pub fn clean_parakeet(text: &str) -> String {
+    let kept: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| {
+            !(line.starts_with("Processing")
+                || line.contains("parakeet_")
+                || line.contains("ggml_")
+                || line.starts_with("load")
+                || line.starts_with("main:")
+                || line.starts_with("system_info")
+                || line.starts_with("Segments")
+                || line.starts_with("Tokens"))
+        })
+        .collect();
+    clean_transcript(&kept.join("\n"))
+}
+
 /// What recognition needs.
 #[derive(Debug, Clone)]
 pub struct Recognition<'a> {
-    /// whisper.cpp's `whisper-cli`.
+    /// The program that uses the model.
+    pub engine: SpeechEngine,
+    /// whisper.cpp's `whisper-cli`, or its `parakeet-cli`.
     pub program: &'a Path,
     /// The recognition model's file.
     pub model: &'a Path,
@@ -1434,8 +1782,19 @@ pub struct Recognition<'a> {
     pub threads: u32,
 }
 
-/// The arguments of `whisper-cli` for a recognition.
+/// The arguments of `whisper-cli` for a recognition, or of `parakeet-cli`,
+/// which takes no language (it finds it) and no voice detector.
 pub fn recognition_arguments(request: &Recognition<'_>) -> Vec<String> {
+    if request.engine == SpeechEngine::Parakeet {
+        return vec![
+            "-m".to_owned(),
+            request.model.to_string_lossy().into_owned(),
+            "-f".to_owned(),
+            request.audio.to_string_lossy().into_owned(),
+            "-t".to_owned(),
+            request.threads.max(1).to_string(),
+        ];
+    }
     let mut arguments = vec![
         "-m".to_owned(),
         request.model.to_string_lossy().into_owned(),
@@ -1494,13 +1853,20 @@ pub fn recognise(request: &Recognition<'_>) -> Result<String, (AiLocalCode, Stri
             format!("{}: {error}", request.program.display()),
         )
     })?;
+    let name = if request.engine == SpeechEngine::Parakeet {
+        "parakeet-cli"
+    } else {
+        "whisper-cli"
+    };
     if output.timed_out || output.status != Some(0) {
-        return Err((
-            AiLocalCode::RecognitionFailed,
-            failure_detail(&output, "whisper-cli"),
-        ));
+        return Err((AiLocalCode::RecognitionFailed, failure_detail(&output, name)));
     }
-    Ok(clean_transcript(&String::from_utf8_lossy(&output.stdout)))
+    let printed = String::from_utf8_lossy(&output.stdout);
+    Ok(if request.engine == SpeechEngine::Parakeet {
+        clean_parakeet(&printed)
+    } else {
+        clean_transcript(&printed)
+    })
 }
 
 /// What synthesis needs.
@@ -1653,6 +2019,36 @@ mod tests {
     }
 
     #[test]
+    fn parakeet_s_progress_lines_are_not_words_and_it_takes_no_language() {
+        let printed = "Processing audio (176000 samples, 11.00 seconds)\n\
+                       parakeet_decode: starting decode with n_frames=138\n\
+                       ggml_backend: using CPU\n\
+                       Apri le impostazioni del suono.\n";
+        assert_eq!(clean_parakeet(printed), "Apri le impostazioni del suono.");
+        assert_eq!(clean_parakeet("Processing audio (1 samples)\n"), "");
+        let request = Recognition {
+            engine: SpeechEngine::Parakeet,
+            program: Path::new("/x/parakeet-cli"),
+            model: Path::new("/m/ggml-parakeet-tdt-0.6b-v3-q4_k.bin"),
+            vad_model: Some(Path::new("/m/ggml-silero-v6.2.0.bin")),
+            audio: Path::new("/r/turn.wav"),
+            language: "it",
+            threads: 4,
+        };
+        assert_eq!(
+            recognition_arguments(&request),
+            [
+                "-m",
+                "/m/ggml-parakeet-tdt-0.6b-v3-q4_k.bin",
+                "-f",
+                "/r/turn.wav",
+                "-t",
+                "4"
+            ]
+        );
+    }
+
+    #[test]
     fn marks_for_silence_are_not_words() {
         assert_eq!(
             clean_transcript(" Apri le impostazioni.\n[BLANK_AUDIO]\n (silence)\n"),
@@ -1673,6 +2069,7 @@ mod tests {
     #[test]
     fn the_command_lines_are_as_designed() {
         let request = Recognition {
+            engine: SpeechEngine::WhisperCpp,
             program: Path::new("/x/whisper-cli"),
             model: Path::new("/m/ggml-base-q5_1.bin"),
             vad_model: Some(Path::new("/m/ggml-silero-v6.2.0.bin")),

@@ -490,16 +490,21 @@ impl AiLocalCode {
                 code: self,
                 title: "Speech engine not installed",
                 severity: Severity::Error,
-                detection: "The speech recognition program (whisper.cpp's whisper-cli) or the \
-                            speech synthesis program (Piper) is not at its path.",
-                user_message: "Speech on this computer is not available because a part of TUR \
+                detection: "The speech recognition program (whisper.cpp's whisper-cli or \
+                            parakeet-cli) is not at its path, or the speech synthesis program \
+                            (Piper) is not installed in the speech store, or Python could not \
+                            install it.",
+                user_message: "Speech on this computer is not available because a part of it \
                                is missing. Nothing was recognised or spoken.",
-                technical_explanation: "TUR's image installs whisper-cli under \
-                                        /usr/libexec/tur/whisper.cpp and Piper under \
-                                        /usr/libexec/tur/piper. The program named on the command \
-                                        line or the installed one was not found.",
-                recovery_action: "Install the latest TUR updates. If it keeps happening, create \
-                                  a support bundle.",
+                technical_explanation: "TUR's image installs whisper-cli and parakeet-cli under \
+                                        /usr/libexec/tur/whisper.cpp. Piper is not in the image: \
+                                        it is downloaded on first use with the voices (speech \
+                                        ensure piper-tts-1-8-0) and installed in a virtual \
+                                        environment of the speech store. The program named on \
+                                        the command line or the installed one was not found.",
+                recovery_action: "Download the voices again in P@x's voice settings, or run \
+                                  tur-ai-local speech ensure piper-tts-1-8-0. If it keeps \
+                                  happening, install the latest TUR updates.",
             },
             AiLocalCode::AudioNotUsable => CodeEntry {
                 code: self,

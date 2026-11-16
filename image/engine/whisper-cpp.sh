@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Builds speech recognition for P@x's voice, whisper.cpp's whisper-cli, from
+# Builds speech recognition for P@x's voice, whisper.cpp's whisper-cli and
+# parakeet-cli (for NVIDIA's Parakeet models, the optional recogniser), from
 # its source at the version pinned in whisper-cpp.lock. Runs only in the
 # build stage "speech" of image/Containerfile, never on a development machine
 # (AGENTS.md).
@@ -9,15 +10,18 @@
 #   whisper-cpp.sh fetch   with network: the compilers and the Vulkan headers
 #                          from the base image's own repositories, and the
 #                          source archive, checked against its SHA-256.
-#   whisper-cpp.sh build   without network: compile whisper-cli with every
+#   whisper-cpp.sh build   without network: compile whisper-cli and
+#                          parakeet-cli with every
 #                          processor variant ggml has for x86-64, chosen at
 #                          run time, and the Vulkan backend; no HIP/ROCm, no
 #                          CUDA, no ffmpeg, no SDL. Put under /out:
 #
-#     /usr/libexec/tur/whisper.cpp/       whisper-cli, its libraries and the
-#                                         backends it loads; every file finds
-#                                         the others beside it ($ORIGIN)
-#     /usr/bin/whisper-cli                a link to it
+#     /usr/libexec/tur/whisper.cpp/       whisper-cli, parakeet-cli, their
+#                                         libraries and the backends they
+#                                         load; every file finds the others
+#                                         beside it ($ORIGIN)
+#     /usr/bin/whisper-cli,               links to them
+#     /usr/bin/parakeet-cli
 #     /usr/share/licenses/whisper.cpp/    the licence and notices
 #     /usr/lib/tur/built-from-source.d/whisper.cpp.tsv
 #                                         one line for built-from-source.tsv,
@@ -86,18 +90,21 @@ build() {
         -DWHISPER_BUILD_SERVER=OFF \
         -DWHISPER_FFMPEG=OFF \
         -DWHISPER_SDL2=OFF < /dev/null
-    echo "== build whisper-cli, its libraries and every backend"
+    echo "== build whisper-cli, parakeet-cli, their libraries and every backend"
     started="$(date +%s)"
-    cmake --build build --target whisper-cli --parallel "${jobs}" < /dev/null
+    cmake --build build --target whisper-cli parakeet-cli --parallel "${jobs}" < /dev/null
     echo "== built in $(( $(date +%s) - started )) s"
 
     mkdir -p "${out}${prefix}" "${out}/usr/bin" "${out}${licences}" "${out}/usr/lib/tur/built-from-source.d"
-    cp -a build/bin/whisper-cli "${out}${prefix}/"
-    find build/bin build/src build/ggml -maxdepth 2 -name '*.so*' \( -type f -o -type l \) \
+    cp -a build/bin/whisper-cli build/bin/parakeet-cli "${out}${prefix}/"
+    # Wherever the build put the shared libraries (libparakeet's place is not
+    # known for v1.9.5): the ldd check below fails if one is missing.
+    find build -maxdepth 3 -name '*.so*' \( -type f -o -type l \) \
         -exec cp -a {} "${out}${prefix}/" \;
     find "${out}${prefix}" -type f -exec strip --strip-unneeded {} \;
     chmod 0755 "${out}${prefix}"/*
     ln -s ../libexec/tur/whisper.cpp/whisper-cli "${out}/usr/bin/whisper-cli"
+    ln -s ../libexec/tur/whisper.cpp/parakeet-cli "${out}/usr/bin/parakeet-cli"
 
     echo "== what it is"
     ls -la "${out}${prefix}"

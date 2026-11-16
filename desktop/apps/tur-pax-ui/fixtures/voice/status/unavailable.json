@@ -58,7 +58,8 @@
           "price_per_minute": 0.03,
           "transport": "websocket"
         }
-      ]
+      ],
+      "suggestion": null
     },
     "microphone_open": false,
     "problem": {
@@ -151,6 +152,27 @@
       "available": false,
       "explanation": "A wake word would keep the microphone open and listen, on this computer only, for P@x's name. It is not in this version.",
       "on": false
-    }
+    },
+    "language": {
+      "setting": "auto",
+      "system": "it",
+      "effective": "it"
+    },
+    "engines": [
+      {
+        "id": "piper-tts-1.8.0",
+        "name": "Piper 1.8.0",
+        "installed": false,
+        "download_bytes": 34131442,
+        "licence": {
+          "id": "GPL-3.0-or-later",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "GPL-3.0-or-later: a separate program that P@x runs; its source is offered"
+        },
+        "credit": "none"
+      }
+    ],
+    "alternatives": []
   }
 }

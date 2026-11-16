@@ -416,7 +416,12 @@ public Q_SLOTS:
         }
         const QJsonObject asked = QJsonDocument::fromJson(options.toUtf8()).object();
         const QJsonObject current = voiceStatus();
-        const qint64 needed = qint64(current.value(QStringLiteral("download_bytes_needed")).toDouble());
+        qint64 needed = qint64(current.value(QStringLiteral("download_bytes_needed")).toDouble());
+        // With the models named (a recognition model the person chose in
+        // place of the recommended one), the size is theirs: what of them is
+        // not on this computer, as the status lists each.
+        if (asked.contains(QStringLiteral("models")))
+            needed = bytesOf(current, asked.value(QStringLiteral("models")).toArray());
         if (needed > 0 && qint64(asked.value(QStringLiteral("download_bytes")).toDouble()) != needed) {
             refuse(QStringLiteral("TUR-AI-SERVICE-006"),
                    QStringLiteral("the download size named is not the size of what would be downloaded (%1 bytes)").arg(needed));
@@ -591,6 +596,37 @@ private:
     static QString compact(const QJsonObject &object)
     {
         return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+    }
+
+    // What the named speech models download, from the status: every model,
+    // detector, engine and voice it lists, by its id.
+    static qint64 bytesOf(const QJsonObject &status, const QJsonArray &ids)
+    {
+        QJsonArray listed;
+        listed.append(status.value(QStringLiteral("recognition")));
+        listed.append(status.value(QStringLiteral("voice_activity")));
+        for (const QString &key : { QStringLiteral("alternatives"), QStringLiteral("engines") }) {
+            for (const QJsonValue &item : status.value(key).toArray())
+                listed.append(item);
+        }
+        for (const QJsonValue &item : status.value(QStringLiteral("synthesis")).toObject().value(QStringLiteral("voices")).toArray())
+            listed.append(item);
+        qint64 total = 0;
+        for (const QJsonValue &wanted : ids) {
+            for (const QJsonValue &item : listed) {
+                const QJsonObject model = item.toObject();
+                const QString id = model.value(QStringLiteral("id")).toString(
+                    model.value(QStringLiteral("model")).toString(model.value(QStringLiteral("voice")).toString()));
+                if (id.isEmpty() || id != wanted.toString())
+                    continue;
+                const QJsonValue installed = model.value(QStringLiteral("installed"));
+                if (installed.toBool() || installed.toString() == QLatin1String("installed"))
+                    break;
+                total += qint64(model.value(QStringLiteral("download_bytes")).toDouble());
+                break;
+            }
+        }
+        return total;
     }
 
     // The voice status of the scenario, with what is playing now.

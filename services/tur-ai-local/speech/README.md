@@ -11,15 +11,23 @@ The design is `docs/architecture/pax-voice.md`.
 | Kind | Engine | Entries |
 |---|---|---|
 | `recognition` | whisper.cpp's `whisper-cli` | `whisper-tiny-q5-1`, `whisper-base-q5-1` (the free tier), `whisper-small-q5-1`, `whisper-large-v3-turbo-q5-0` |
+| `recognition` | whisper.cpp's `parakeet-cli` | `parakeet-tdt-0-6b-v3-q4-k` (optional, never recommended; CC BY 4.0, credited) |
 | `voice-activity` | whisper.cpp (`--vad`) | `silero-vad-v6.2.0` |
 | `synthesis` | Piper (piper1-gpl, a GPL program run as a child process) | `voice-en-us-ljspeech-medium` (English default), `voice-en-gb-cori-medium`, `voice-it-paola-medium` (Italian default), `voice-de-thorsten-medium`, `voice-es-davefx-medium`, `voice-fr-siwis-medium` |
+| `engine` | — (it is the program) | `piper-tts-1-8-0`: Piper itself, downloaded on first use with the voices and installed in the speech store |
 
 ## How an entry is written
 
 - `id` follows the model catalogue's rule (lower-case letters, digits, `.`,
   `-`); the publisher's file names are kept as they are in `files`.
-- Every file's URL is `https`, names the repository's pinned commit
-  (`revision`, 40 hexadecimal digits) and ends with the file's name; its
+- Every model's and voice's file URL is `https`, names the repository's
+  pinned commit (`revision`, 40 hexadecimal digits) and ends with the file's
+  name. An `engine` is a wheel of the Python Package Index, which has no
+  commit: its `revision` is its release, its file is under
+  `https://files.pythonhosted.org/`, pinned by size and SHA-256, and it
+  must name its source archive (`source_url`, `source_sha256`) for the
+  GPL's offer of source; `image/engine/piper.lock` records the same pins and
+  `tests/speech.rs` holds the two together. Every file's
   size and SHA-256 are the repository's own metadata (the Hugging Face API's
   tree with LFS digests). For a small file that is not in LFS (a Piper
   voice's `.onnx.json`), the SHA-256 was computed from the file fetched at
@@ -31,6 +39,12 @@ The design is `docs/architecture/pax-voice.md`.
     MIT License").
   - Silero VAD: `huggingface.co/ggml-org/whisper-vad` at
     `9ffd54a1e1ee413ddf265af9913beaf518d1639b`; snakers4/silero-vad is MIT.
+  - Parakeet: `huggingface.co/ggml-org/parakeet-GGUF` at
+    `35156454d1a39de06863303dd209fd2bed6ee079`; the weights' licence is
+    `nvidia/parakeet-tdt-0.6b-v3`'s, CC BY 4.0 (the ggml repository's card
+    says MIT, which a conversion cannot make it); credited in `credit`.
+  - Piper: PyPI's JSON for `piper-tts` 1.8.0 (the wheel's size and
+    SHA-256, the source archive's SHA-256).
   - Piper voices: `huggingface.co/rhasspy/piper-voices` at
     `e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c`; each voice's MODEL_CARD;
     piper1-gpl's `docs/LICENSING.md` ("no license grant of its own over
@@ -47,7 +61,8 @@ Several voices were retrained between 9 and 13 November 2026 so that they
 no longer descend from the research-only Lessac voice. Their file names did
 not change: **only the SHA-256 in the entry proves the retrained copy.**
 They need Piper 1.5 or later; Fedora 45's `python3-piper-tts` is 1.4.2, so
-TUR installs piper-tts 1.8.0 (pax-voice.md, section 9).
+TUR uses piper-tts 1.8.0, downloaded on first use (the entry
+`piper-tts-1-8-0`; pax-voice.md, section 9).
 
 Left out: `en_US-lessac-medium` (Lessac Blizzard 2013 licence: research
 only); `en_US-libritts_r-medium` (fine-tuned from lessac);
@@ -57,7 +72,10 @@ only); `en_US-libritts_r-medium` (fine-tuned from lessac);
 ## Speed and memory
 
 `memory_bytes` and `encode_ms_8_threads` are estimates, each with its basis
-in the entry (`speed_basis`); TUR has not measured them. The `pax-voice`
+in the entry (`speed_basis`); TUR has not measured them. Parakeet's has no
+published basis at all: no CPU figure for `parakeet-cli` exists, and it is
+set between Whisper base and small because Parakeet encodes only the audio
+there is, not a 30-second window. The `pax-voice`
 workflow (`.github/workflows/pax-voice.yml`, started by hand) measures
 latency and peak memory for each recognition model; its results replace
 the estimates in a later change.

@@ -6,7 +6,7 @@
       "other_sound": false,
       "program_found": true
     },
-    "download_bytes_needed": 187356515,
+    "download_bytes_needed": 221487957,
     "enabled": false,
     "free": true,
     "keys": {
@@ -58,7 +58,15 @@
           "price_per_minute": 0.03,
           "transport": "websocket"
         }
-      ]
+      ],
+      "suggestion": {
+        "engine": "openai-realtime",
+        "name": "OpenAI Realtime",
+        "company": "OpenAI",
+        "model": "gpt-realtime-2.1-mini",
+        "price_per_minute": 0.03,
+        "currency": "USD"
+      }
     },
     "microphone_open": false,
     "problem": {
@@ -151,6 +159,27 @@
       "available": false,
       "explanation": "A wake word would keep the microphone open and listen, on this computer only, for P@x's name. It is not in this version.",
       "on": false
-    }
+    },
+    "language": {
+      "setting": "auto",
+      "system": "it",
+      "effective": "it"
+    },
+    "engines": [
+      {
+        "id": "piper-tts-1.8.0",
+        "name": "Piper 1.8.0",
+        "installed": false,
+        "download_bytes": 34131442,
+        "licence": {
+          "id": "GPL-3.0-or-later",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "GPL-3.0-or-later: a separate program that P@x runs; its source is offered"
+        },
+        "credit": "none"
+      }
+    ],
+    "alternatives": []
   }
 }

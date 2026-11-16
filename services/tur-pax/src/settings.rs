@@ -1500,6 +1500,9 @@ pub struct Paths {
     pub live: Vec<PathBuf>,
     /// The sound server's programs: capture, playback, and its description.
     pub sound: crate::audio::SoundPrograms,
+    /// The session's locale (`LC_ALL`, `LC_MESSAGES` or `LANG`): what
+    /// speech is recognised in when the person chose no language.
+    pub locale: Option<String>,
 }
 
 /// The list of live engines an administrator may put in place.
@@ -1551,6 +1554,7 @@ impl Paths {
             voice: config.join("voice.json"),
             live: vec![PathBuf::from(ADMIN_LIVE), PathBuf::from(SHIPPED_LIVE)],
             sound: crate::audio::SoundPrograms::default(),
+            locale: None,
         })
     }
 
@@ -1565,6 +1569,10 @@ impl Paths {
             absolute(std::env::var_os("HOME")),
         )?;
         paths.runtime = absolute(std::env::var_os("XDG_RUNTIME_DIR"));
+        paths.locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+            .iter()
+            .filter_map(|name| std::env::var(name).ok())
+            .find(|value| !value.is_empty());
         Some(paths)
     }
 }

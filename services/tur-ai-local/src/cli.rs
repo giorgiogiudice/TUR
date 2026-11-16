@@ -114,9 +114,17 @@ pub struct Places {
     /// whisper.cpp's recogniser, whisper-cli
     #[arg(long, global = true, value_name = "FILE")]
     pub whisper_cli: Option<PathBuf>,
-    /// Piper's command
+    /// Piper's command. Without it, the launcher of the Piper engine
+    /// installed in the speech store (speech ensure piper-tts-1-8-0)
     #[arg(long, global = true, value_name = "FILE")]
     pub piper: Option<PathBuf>,
+    /// whisper.cpp's Parakeet recogniser, parakeet-cli
+    #[arg(long, global = true, value_name = "FILE")]
+    pub parakeet_cli: Option<PathBuf>,
+    /// The Python that Piper's virtual environment is made with. Without it,
+    /// /usr/bin/python3
+    #[arg(long, global = true, value_name = "FILE")]
+    pub python: Option<PathBuf>,
 }
 
 /// The commands.
@@ -2124,6 +2132,7 @@ fn engine_name(engine: SpeechEngine) -> &'static str {
     match engine {
         SpeechEngine::WhisperCpp => "whisper.cpp",
         SpeechEngine::Piper => "piper",
+        SpeechEngine::Parakeet => "parakeet",
     }
 }
 
@@ -2283,12 +2292,52 @@ fn speech_models_command(
 struct RecommendedRecognition<'a> {
     id: &'a str,
     name: &'a str,
+    engine: &'static str,
     tier: SpeechTier,
     reasons: Vec<String>,
     expected_ms: Option<u64>,
     installed: bool,
     download_bytes: u64,
     memory_bytes: u64,
+    /// The offered languages it recognises poorly (Italian only can be
+    /// named: only Italian figures are published).
+    weak_in: Vec<&'static str>,
+    /// A plain sentence when it is weak in a language that may be spoken,
+    /// naming a better model.
+    warning: Option<String>,
+}
+
+/// A recognition model the person may choose instead of the recommended
+/// one.
+#[derive(Serialize)]
+struct AlternativeRecognition<'a> {
+    id: &'a str,
+    name: &'a str,
+    engine: &'static str,
+    installed: bool,
+    download_bytes: u64,
+    memory_bytes: u64,
+    tier: SpeechTier,
+    reasons: Vec<String>,
+    expected_ms: Option<u64>,
+    languages: &'a [String],
+    wer_it_fleurs: Option<f64>,
+    weak_in: Vec<&'static str>,
+    licence: LicenceView,
+    credit: &'a str,
+    note: &'a str,
+}
+
+/// A program the voices need, downloaded on first use.
+#[derive(Serialize)]
+struct RecommendedEngine<'a> {
+    id: &'a str,
+    name: &'a str,
+    installed: bool,
+    download_bytes: u64,
+    licence: LicenceView,
+    credit: &'a str,
+    source_url: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -2318,6 +2367,8 @@ struct SpeechRecommendReport<'a> {
     recognition: Option<RecommendedRecognition<'a>>,
     vad: Option<RecommendedPart<'a>>,
     voices: Vec<RecommendedVoice<'a>>,
+    engines: Vec<RecommendedEngine<'a>>,
+    alternatives: Vec<AlternativeRecognition<'a>>,
     download_bytes_needed: u64,
     free: bool,
     message: String,
@@ -2337,7 +2388,48 @@ fn speech_recommend_command(
     let installed =
         |entry: &SpeechEntry| store.as_ref().is_some_and(|store| store.is_installed(entry));
     let chosen = speech::recommend(&catalogue, &hardware, args.language.as_deref());
+    let warning = chosen.warning(args.language.as_deref());
     let mut needed: u64 = 0;
+    let alternatives: Vec<AlternativeRecognition<'_>> = chosen
+        .alternatives
+        .iter()
+        .map(|(entry, judgement)| AlternativeRecognition {
+            id: &entry.id,
+            name: &entry.name,
+            engine: engine_name(entry.engine),
+            installed: installed(*entry),
+            download_bytes: entry.download_bytes(),
+            memory_bytes: entry.memory_bytes,
+            tier: judgement.tier,
+            reasons: judgement.reasons.clone(),
+            expected_ms: judgement.expected_ms,
+            languages: &entry.languages,
+            wer_it_fleurs: entry.wer_it_fleurs,
+            weak_in: entry.weak_in(),
+            licence: speech_licence_view(entry),
+            credit: &entry.credit,
+            note: &entry.note,
+        })
+        .collect();
+    let engines: Vec<RecommendedEngine<'_>> = chosen
+        .engine
+        .map(|entry| {
+            let here = installed(entry);
+            if !here {
+                needed += entry.download_bytes();
+            }
+            RecommendedEngine {
+                id: &entry.id,
+                name: &entry.name,
+                installed: here,
+                download_bytes: entry.download_bytes(),
+                licence: speech_licence_view(entry),
+                credit: &entry.credit,
+                source_url: entry.source_url.as_deref(),
+            }
+        })
+        .into_iter()
+        .collect();
     let recognition = chosen.recognition.map(|(entry, judgement)| {
         let here = installed(entry);
         if !here {
@@ -2346,12 +2438,15 @@ fn speech_recommend_command(
         RecommendedRecognition {
             id: &entry.id,
             name: &entry.name,
+            engine: engine_name(entry.engine),
             tier: judgement.tier,
             reasons: judgement.reasons,
             expected_ms: judgement.expected_ms,
             installed: here,
             download_bytes: entry.download_bytes(),
             memory_bytes: entry.memory_bytes,
+            weak_in: entry.weak_in(),
+            warning: warning.clone(),
         }
     });
     let vad = chosen.vad.map(|entry| {
@@ -2404,6 +2499,8 @@ fn speech_recommend_command(
                 recognition,
                 vad,
                 voices,
+                engines,
+                alternatives,
                 download_bytes_needed: needed,
                 free: true,
                 message,
@@ -2416,6 +2513,20 @@ fn speech_recommend_command(
             "Recognition: {} ({}).\n",
             found.id,
             tier_words(found.tier)
+        ));
+        if let Some(warning) = &found.warning {
+            text.push_str(&format!("{warning}\n"));
+        }
+    }
+    for engine in &engines {
+        text.push_str(&format!("Voice engine: {}.\n", engine.id));
+    }
+    for other in &alternatives {
+        text.push_str(&format!(
+            "Also possible: {} ({}, {}).\n",
+            other.id,
+            tier_words(other.tier),
+            human_bytes(other.download_bytes)
         ));
     }
     if let Some(found) = &vad {
@@ -2522,8 +2633,12 @@ fn speech_ensure_steps(
         free_space: &ensure::free_space,
         cancelled: &cancelled,
     };
+    let python = places
+        .python
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_PYTHON));
     for entry in entries {
-        speech::fetch_speech(&store, entry, &options, &mut *emit)
+        speech::fetch_speech(&store, entry, &options, &python, &mut *emit)
             .map_err(|error| (entry.id.clone(), Failure::coded(error.code, error.detail)))?;
     }
     Ok(())
@@ -2671,7 +2786,9 @@ fn speech_stt_command(places: &Places, args: &SttArgs, out: &mut dyn Write) -> R
     let model_path = store
         .file_path(entry, &entry.files[0].name)
         .ok_or_else(|| Failure::coded(AiLocalCode::UnknownModel, "not an id"))?;
-    let vad_path = if args.vad {
+    let parakeet = entry.engine == SpeechEngine::Parakeet;
+    // parakeet-cli takes no voice detector: --vad is ignored for it.
+    let vad_path = if args.vad && !parakeet {
         catalogue
             .of_kind(SpeechKind::VoiceActivity)
             .find(|detector| store.is_installed(detector))
@@ -2679,14 +2796,22 @@ fn speech_stt_command(places: &Places, args: &SttArgs, out: &mut dyn Write) -> R
     } else {
         None
     };
-    let program = places
-        .whisper_cli
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_WHISPER_CLI));
+    let program = if parakeet {
+        places
+            .parakeet_cli
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_PARAKEET_CLI))
+    } else {
+        places
+            .whisper_cli
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_WHISPER_CLI))
+    };
     let info = speech::wav_info(&args.file)
         .map_err(|detail| Failure::coded(AiLocalCode::AudioNotUsable, detail))?;
     let started = std::time::Instant::now();
     let text = speech::recognise(&speech::Recognition {
+        engine: entry.engine,
         program: &program,
         model: &model_path,
         vad_model: vad_path.as_deref(),
@@ -2760,10 +2885,21 @@ fn speech_tts_command(places: &Places, args: &TtsArgs, out: &mut dyn Write) -> R
         .map_err(|error| Failure::coded(AiLocalCode::TextNotUsable, error.to_string()))?;
     let text = String::from_utf8(bytes)
         .map_err(|_| Failure::coded(AiLocalCode::TextNotUsable, "the text is not valid UTF-8"))?;
-    let program = places
-        .piper
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_PIPER));
+    // Piper is not in the image: it is the engine of the speech store,
+    // downloaded with the voices.
+    let program = match &places.piper {
+        Some(program) => program.clone(),
+        None => catalogue
+            .voice_engine()
+            .and_then(|engine| store.launcher(engine))
+            .ok_or_else(|| {
+                Failure::coded(
+                    AiLocalCode::SpeechEngineMissing,
+                    "Piper is not on this computer yet; run tur-ai-local speech ensure \
+                     piper-tts-1-8-0",
+                )
+            })?,
+    };
     let started = std::time::Instant::now();
     let info = speech::synthesise(
         &speech::Synthesis {

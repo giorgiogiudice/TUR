@@ -20,6 +20,17 @@ import Tur.Kit as Kit
 // "Download and switch on" calls PrepareVoice with the size that was shown,
 // follows its VoiceProgress, then SetVoiceSettings. "Not now" leaves voice
 // off.
+//
+// The owner's decisions of 16 November 2026 (pax-voice.md, report
+// pax-voice-1 section 9): the language follows the system's when P@x speaks
+// it, otherwise it is detected; where the model this computer runs well is
+// weak in a language (Whisper tiny in Italian), the screen says so plainly
+// and offers the better models as a choice, with their size, how they suit
+// this computer and any credit their licence asks for (Parakeet's CC BY);
+// "Always wait for me to press Send" is a setting, off; spoken answers are
+// in a voice on this computer; a provider's live engine is suggested, under
+// the local one, when the person has that provider's key, at its cheapest
+// model's price a minute.
 SetupScreen {
     id: screen
 
@@ -29,6 +40,9 @@ SetupScreen {
     property string language: "auto"
     property bool answersAloud: false
     property string liveEngine: "local"
+    property bool alwaysWait: false
+    // The recognition model chosen here; empty: the one recommended.
+    property string recognitionChoice: ""
     property bool working: false
     property var events: []
 
@@ -43,6 +57,19 @@ SetupScreen {
         return out
     }
     readonly property var recognition: screen.status.recognition || {}
+    readonly property string recommendedId: String(screen.recognition.id || screen.recognition.model || "")
+    readonly property var alternatives: screen.status.alternatives || []
+    readonly property var programs: screen.status.engines || []
+    readonly property var suggestion: (screen.status.live || {}).suggestion || null
+    readonly property var chosenRecognition: {
+        for (const model of screen.alternatives) {
+            if (String(model.id || model.model || "") === screen.recognitionChoice)
+                return model
+        }
+        return screen.recognition
+    }
+    readonly property bool choseAlternative: screen.recognitionChoice.length > 0
+                                             && screen.recognitionChoice !== screen.recommendedId
     readonly property var engines: (screen.status.live || {}).engines || []
     readonly property var chosenEngine: {
         for (const engine of screen.engines) {
@@ -53,11 +80,42 @@ SetupScreen {
     }
     readonly property bool engineNeedsConsent: screen.chosenEngine !== null && screen.chosenEngine.kind === "provider"
                                                && screen.chosenEngine.consent_current !== true
-    readonly property real needed: Number(screen.status.download_bytes_needed || 0)
+    // What will be downloaded: the service's total, with the recognition
+    // model chosen here in place of the recommended one.
+    readonly property real needed: {
+        const total = Number(screen.status.download_bytes_needed || 0)
+        if (!screen.choseAlternative)
+            return total
+        return total - screen.missingBytes(screen.recognition) + screen.missingBytes(screen.chosenRecognition)
+    }
+    // Every speech model, detector, program and voice that is to be ready,
+    // by id, for PrepareVoice.
+    readonly property var models: {
+        const ids = []
+        const add = function (model, key) {
+            const id = String((model || {}).id || (model || {})[key] || "")
+            if (id.length > 0 && ids.indexOf(id) < 0)
+                ids.push(id)
+        }
+        add(screen.chosenRecognition, "model")
+        add(screen.status.voice_activity, "model")
+        for (const program of screen.programs)
+            add(program, "id")
+        for (const voice of screen.voices)
+            add(voice, "voice")
+        return ids
+    }
     readonly property bool loaded: Object.keys(screen.status).length > 0
 
     signal done()
     signal skipped()
+
+    function missingBytes(model: var): real {
+        const given = model || {}
+        if (given.installed === true || given.installed === "installed")
+            return 0
+        return Number(given.download_bytes || 0)
+    }
 
     function read(): void {
         screen.client.call("GetVoiceStatus", [], function (reply) {
@@ -70,6 +128,8 @@ SetupScreen {
             screen.language = String(settings.language || "auto")
             screen.answersAloud = settings.spoken_replies === true
             screen.liveEngine = String((settings.live || {}).engine || "local")
+            screen.alwaysWait = settings.transcript_check === "wait"
+            screen.recognitionChoice = String((settings.recognition || {}).model || "")
         })
     }
 
@@ -80,7 +140,7 @@ SetupScreen {
         screen.working = true
         if (screen.needed > 0) {
             screen.events = []
-            const options = JSON.stringify({ download_bytes: screen.needed })
+            const options = JSON.stringify({ download_bytes: screen.needed, models: screen.models })
             screen.client.call("PrepareVoice", [options], function (reply) {
                 if (!reply.ok) {
                     screen.working = false
@@ -97,8 +157,13 @@ SetupScreen {
             enabled: true,
             language: screen.language,
             spoken_replies: screen.answersAloud,
+            transcript_check: screen.alwaysWait ? "wait" : "show",
             live: { engine: screen.liveEngine }
         }
+        if (screen.choseAlternative)
+            chosen.recognition = { model: screen.recognitionChoice }
+        if (screen.suggestion !== null && screen.liveEngine === String(screen.suggestion.engine || ""))
+            chosen.live.model = String(screen.suggestion.model || "")
         if (screen.chosenEngine !== null && screen.chosenEngine.kind === "provider")
             chosen.live_consent_version = String(screen.chosenEngine.consent_version || "")
         screen.client.call("SetVoiceSettings", [JSON.stringify(chosen)], function (reply) {
@@ -111,20 +176,7 @@ SetupScreen {
     }
 
     function languageName(code: string): string {
-        switch (code) {
-        case "en":
-            return qsTr("English")
-        case "it":
-            return qsTr("Italian")
-        case "de":
-            return qsTr("German")
-        case "es":
-            return qsTr("Spanish")
-        case "fr":
-            return qsTr("French")
-        default:
-            return code
-        }
+        return Words.languageName(code)
     }
 
     title: Words.voiceTitle
@@ -211,6 +263,75 @@ SetupScreen {
             tone: Kit.Label.Secondary
             wrapMode: Text.Wrap
         }
+
+        // Said plainly where the model this computer runs well is weak.
+        Kit.Label {
+            objectName: "recognitionWarning"
+            Layout.fillWidth: true
+            visible: text.length > 0
+            text: String(screen.recognition.warning || "")
+            wrapMode: Text.Wrap
+        }
+
+        Kit.Label {
+            Layout.fillWidth: true
+            visible: screen.alternatives.length > 0
+            text: Words.voiceRecognitionChoice
+            kind: Kit.Label.Strong
+            wrapMode: Text.Wrap
+        }
+
+        Repeater {
+            // The recommended model first, then the others the service
+            // offers, better Italian first.
+            model: screen.alternatives.length > 0 ? [screen.recognition].concat(screen.alternatives) : []
+
+            delegate: ChoiceCard {
+                id: modelCard
+
+                required property var modelData
+                required property int index
+
+                readonly property string modelId: String(modelCard.modelData.id || modelCard.modelData.model || "")
+                readonly property string credit: String(modelCard.modelData.credit || "none")
+
+                objectName: "recognition-" + modelCard.modelId
+                Layout.fillWidth: true
+                title: String(modelCard.modelData.name || modelCard.modelId)
+                subtitle: [modelCard.index === 0 ? Words.voiceRecommended : "",
+                           Words.tierLabel(String(modelCard.modelData.tier || "")),
+                           Words.voiceDownload(screen.missingBytes(modelCard.modelData)),
+                           modelCard.credit !== "none" ? qsTr("Credit: %1").arg(modelCard.credit) : ""]
+                          .filter(part => part.length > 0).join(" · ")
+                unavailable: modelCard.modelData.tier === "does-not-fit"
+                selected: modelCard.index === 0 ? !screen.choseAlternative
+                                                : screen.recognitionChoice === modelCard.modelId
+                onClicked: {
+                    if (!modelCard.unavailable)
+                        screen.recognitionChoice = modelCard.index === 0 ? "" : modelCard.modelId
+                }
+            }
+        }
+    }
+
+    // The programs the voice runs, downloaded with the voices: Piper is
+    // GPL-3.0-or-later and runs as a separate program.
+    Repeater {
+        model: screen.programs
+
+        delegate: Kit.Label {
+            id: programLine
+
+            required property var modelData
+
+            objectName: "voiceEngine-" + String(programLine.modelData.id || "")
+            Layout.fillWidth: true
+            text: qsTr("%1 · %2").arg(Words.voiceEngine(programLine.modelData))
+                                 .arg(Words.voiceDownload(screen.missingBytes(programLine.modelData)))
+            kind: Kit.Label.Small
+            tone: Kit.Label.Secondary
+            wrapMode: Text.Wrap
+        }
     }
 
     ColumnLayout {
@@ -234,7 +355,7 @@ SetupScreen {
 
                 required property var modelData
 
-                objectName: "voice-" + String(voiceLine.modelData.voice || "")
+                objectName: "voice-" + String(voiceLine.modelData.voice || voiceLine.modelData.id || "")
                 Layout.fillWidth: true
                 spacing: 0
 
@@ -275,11 +396,20 @@ SetupScreen {
         wrapMode: Text.Wrap
     }
 
+    Kit.Label {
+        objectName: "voiceLanguageLine"
+        Layout.fillWidth: true
+        visible: screen.loaded
+        text: Words.voiceLanguageLine(Object.assign({}, screen.status.language || {}, { setting: screen.language }))
+        wrapMode: Text.Wrap
+    }
+
     ChoiceCard {
         objectName: "language-auto"
         Layout.fillWidth: true
         visible: screen.loaded
         title: Words.voiceAutomatic
+        subtitle: Words.voiceLanguageLine(Object.assign({}, screen.status.language || {}, { setting: "auto" }))
         selected: screen.language === "auto"
         onClicked: screen.language = "auto"
     }
@@ -320,6 +450,26 @@ SetupScreen {
         wrapMode: Text.Wrap
     }
 
+    Kit.CheckBox {
+        id: alwaysWaitBox
+
+        objectName: "alwaysWait"
+        Layout.fillWidth: true
+        visible: screen.loaded
+        text: Words.voiceAlwaysWait
+        checked: screen.alwaysWait
+        onToggled: screen.alwaysWait = alwaysWaitBox.checked
+    }
+
+    Kit.Label {
+        Layout.fillWidth: true
+        visible: screen.loaded
+        text: Words.voiceAlwaysWaitText
+        kind: Kit.Label.Small
+        tone: Kit.Label.Secondary
+        wrapMode: Text.Wrap
+    }
+
     Kit.Label {
         objectName: "wakeWordLine"
         Layout.fillWidth: true
@@ -349,9 +499,14 @@ SetupScreen {
     }
 
     Repeater {
-        // On this computer first; then the providers, in their order.
-        model: screen.engines.filter(engine => engine.kind === "local")
-                                 .concat(screen.engines.filter(engine => engine.kind !== "local"))
+        // On this computer first; then a provider suggested because the
+        // person has its key; then the other providers, in their order.
+        model: {
+            const suggested = screen.suggestion !== null ? String(screen.suggestion.engine || "") : ""
+            return screen.engines.filter(engine => engine.kind === "local")
+                       .concat(screen.engines.filter(engine => engine.kind !== "local" && engine.id === suggested))
+                       .concat(screen.engines.filter(engine => engine.kind !== "local" && engine.id !== suggested))
+        }
 
         delegate: ChoiceCard {
             id: engineCard
@@ -359,20 +514,34 @@ SetupScreen {
             required property var modelData
 
             readonly property bool provider: engineCard.modelData.kind === "provider"
+            readonly property bool suggested: screen.suggestion !== null
+                                              && String(screen.suggestion.engine || "") === String(engineCard.modelData.id || "")
 
             objectName: "liveEngine-" + String(engineCard.modelData.id || "")
             Layout.fillWidth: true
             title: String(engineCard.modelData.name || engineCard.modelData.id || "")
-            subtitle: engineCard.provider
-                      ? [Words.liveOptional, Words.voiceSentTo(String(engineCard.modelData.company || engineCard.modelData.name || "")),
-                         Words.perMinute(engineCard.modelData.price_per_minute, String(engineCard.modelData.currency || ""))]
-                        .filter(part => part.length > 0).join(" · ")
-                      : Words.liveLocal
+            subtitle: engineCard.suggested
+                      ? Words.liveSuggestion(screen.suggestion)
+                      : engineCard.provider
+                        ? [Words.liveOptional, Words.voiceSentTo(String(engineCard.modelData.company || engineCard.modelData.name || "")),
+                           Words.perMinute(engineCard.modelData.price_per_minute, String(engineCard.modelData.currency || ""))]
+                          .filter(part => part.length > 0).join(" · ")
+                        : Words.liveLocal
             unavailable: engineCard.modelData.built === false
             selected: screen.liveEngine === String(engineCard.modelData.id || "")
             onClicked: {
                 if (!engineCard.unavailable)
                     screen.liveEngine = String(engineCard.modelData.id || "")
+            }
+
+            Kit.Label {
+                objectName: "liveSuggestion"
+                Layout.fillWidth: true
+                visible: engineCard.suggested
+                text: Words.liveSuggested(String((screen.suggestion || {}).company || ""))
+                kind: Kit.Label.Small
+                tone: Kit.Label.Secondary
+                wrapMode: Text.Wrap
             }
         }
     }

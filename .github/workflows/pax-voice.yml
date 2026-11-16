@@ -27,7 +27,7 @@ on:
       models:
         description: "Recognition models to measure, comma-separated"
         required: false
-        default: "whisper-tiny-q5-1,whisper-base-q5-1,whisper-small-q5-1,whisper-large-v3-turbo-q5-0"
+        default: "whisper-tiny-q5-1,whisper-base-q5-1,whisper-small-q5-1,whisper-large-v3-turbo-q5-0,parakeet-tdt-0-6b-v3-q4-k"
 
 permissions:
   contents: read
@@ -95,12 +95,14 @@ jobs:
           # same build options, the same layout.
           docker exec fedora sh -c 'cp -r /w/image/engine /tmp/engine && sh /tmp/engine/whisper-cpp.sh fetch && sh /tmp/engine/whisper-cpp.sh build' \
             2>&1 | tail -n 60 | tee "$WORK/evidence/whisper-cpp-build.txt"
-          docker exec fedora sh -c 'cp -a /out/. / && mkdir -p /usr/lib/tur && /usr/bin/whisper-cli --help > /dev/null'
-          docker exec fedora sh -c 'sh /tmp/engine/piper.sh fetch && sh /piper/piper.sh install' \
-            2>&1 | tail -n 30 | tee "$WORK/evidence/piper-install.txt"
+          docker exec fedora sh -c 'cp -a /out/. / && mkdir -p /usr/lib/tur && /usr/bin/whisper-cli --help > /dev/null && /usr/bin/parakeet-cli --help > /dev/null'
+          # Piper's non-GPL dependencies, as the image has them. Piper itself
+          # is downloaded on first use by tur-ai-local (speech_ci.py clips).
+          docker exec fedora sh -c 'sh /tmp/engine/piper.sh deps' \
+            2>&1 | tail -n 30 | tee "$WORK/evidence/piper-deps.txt"
           docker exec fedora sh -c 'mkdir -p /usr/share/tur/ai-local/speech && cp /w/services/tur-ai-local/speech/*.toml /usr/share/tur/ai-local/speech/'
           # The engine for the next job.
-          docker exec fedora sh -c "tar -C / -cf $WORK/engine/whisper.cpp.tar usr/libexec/tur/whisper.cpp usr/bin/whisper-cli && chmod 0644 $WORK/engine/whisper.cpp.tar"
+          docker exec fedora sh -c "tar -C / -cf $WORK/engine/whisper.cpp.tar usr/libexec/tur/whisper.cpp usr/bin/whisper-cli usr/bin/parakeet-cli && chmod 0644 $WORK/engine/whisper.cpp.tar"
 
       - name: TUR's test sentences, spoken by TUR's voices
         run: |
@@ -208,7 +210,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE_PULL" sleep infinity
           docker exec fedora dnf -y --setopt=install_weak_deps=False install python3 util-linux libgomp vulkan-loader python3-dbus python3-gobject-base dbus-daemon procps-ng 2>&1 | tail -n 5
           docker exec fedora sh -c "tar -C / -xf $WORK/got/engine/whisper.cpp.tar && /usr/bin/whisper-cli --help > /dev/null"
-          docker exec fedora sh -c 'mkdir -p /usr/lib/tur && cp -r /w/image/engine /tmp/engine && sh /tmp/engine/piper.sh fetch && sh /piper/piper.sh install' | tail -n 5
+          # No speech is synthesised here: Piper is not needed.
           docker exec fedora sh -c 'mkdir -p /usr/share/tur/ai-local/speech && cp /w/services/tur-ai-local/speech/*.toml /usr/share/tur/ai-local/speech/'
 
       - name: The clips through P@x

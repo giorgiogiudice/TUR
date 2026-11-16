@@ -21,9 +21,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tur_ai_local::hardware::{self, Hardware, Source};
 use tur_ai_local::speech::{
-    OFFERED_LANGUAGES, SpeechCatalogue, SpeechEntry, SpeechKind, SpeechStore, SpeechTier,
-    recommend, speech_tier,
+    ENGINE_LAUNCHER, OFFERED_LANGUAGES, SpeechCatalogue, SpeechEngine, SpeechEntry, SpeechKind,
+    SpeechStore, SpeechTier, install_engine, parse_speech_entry, recommend, speech_tier,
 };
+use tur_ai_local::store::InstallState;
 
 use common::*;
 
@@ -78,6 +79,25 @@ fn the_speech_catalogue_loads_and_follows_its_schema() {
 fn every_file_is_pinned_and_every_voice_is_free_to_use() {
     let catalogue = shipped();
     for entry in &catalogue.entries {
+        assert_eq!(entry.licence.restrictions, "none", "{}", entry.id);
+        if entry.kind == SpeechKind::Engine {
+            // An engine comes from the Python Package Index, pinned by its
+            // digest, with its source archive pinned for the GPL's offer.
+            for file in &entry.files {
+                assert!(
+                    file.url.starts_with("https://files.pythonhosted.org/"),
+                    "{}",
+                    file.url
+                );
+                assert_eq!(file.sha256.len(), 64, "{}", file.name);
+            }
+            let source = entry.source_url.as_deref().expect("a source archive");
+            assert!(source.starts_with("https://files.pythonhosted.org/"), "{source}");
+            assert!(source.ends_with(".tar.gz"), "{source}");
+            assert_eq!(entry.source_sha256.as_deref().map(str::len), Some(64));
+            continue;
+        }
+        assert!(entry.source_url.is_none(), "{}", entry.id);
         assert_eq!(entry.revision.len(), 40, "{}", entry.id);
         for file in &entry.files {
             assert!(file.url.starts_with("https://huggingface.co/"), "{}", file.url);
@@ -236,9 +256,254 @@ fn reports_of_the_catalogue_follow_the_schema() {
     assert_eq!(document["free"], true);
     assert_eq!(document["recognition"]["id"], "whisper-tiny-q5-1");
     assert_eq!(document["voices"][0]["id"], "voice-it-paola-medium");
-    // Nothing is downloaded yet, so everything is to be downloaded.
-    let expected = 32_152_673_u64 + 885_098 + 63_221_984 + 5_457;
+    // Nothing is downloaded yet, so everything is to be downloaded: the
+    // model, the detector, the voice and Piper, which the voice needs.
+    let expected = 32_152_673_u64 + 885_098 + 63_221_984 + 5_457 + 34_131_442;
     assert_eq!(document["download_bytes_needed"], expected);
+    assert_eq!(document["engines"][0]["id"], "piper-tts-1-8-0");
+    assert_eq!(document["engines"][0]["installed"], false);
+    assert_eq!(document["engines"][0]["licence"]["id"], "GPL-3.0-or-later");
+    // Tiny is weak in Italian: the report says so, and names base, the
+    // smallest model that is not.
+    assert_eq!(document["recognition"]["weak_in"], serde_json::json!(["it"]));
+    let warning = document["recognition"]["warning"]
+        .as_str()
+        .expect("a warning");
+    assert!(warning.contains("Italian poorly"), "{warning}");
+    assert!(warning.contains("Whisper base"), "{warning}");
+    assert!(warning.contains("slow on this computer"), "{warning}");
+    // Every other model this computer can hold, the best in Italian first:
+    // Parakeet, offered and never recommended, with its credit.
+    let alternatives = document["alternatives"].as_array().expect("alternatives");
+    assert_eq!(alternatives[0]["id"], "parakeet-tdt-0-6b-v3-q4-k");
+    assert_eq!(alternatives[0]["engine"], "parakeet");
+    assert!(
+        alternatives[0]["credit"]
+            .as_str()
+            .is_some_and(|credit| credit.contains("CC BY 4.0") && credit.contains("NVIDIA"))
+    );
+    let ids: Vec<&str> = alternatives
+        .iter()
+        .filter_map(|item| item["id"].as_str())
+        .collect();
+    assert!(ids.contains(&"whisper-base-q5-1"), "{ids:?}");
+    assert!(!ids.contains(&"whisper-tiny-q5-1"), "{ids:?}");
+    // In English the same model is not said to be weak.
+    let document = stdout_json(&run(&[
+        "speech",
+        "recommend",
+        "--json",
+        "--language",
+        "en",
+        "--speech-catalogue",
+        catalogue,
+        "--root",
+        root.to_str().expect("UTF-8"),
+    ]));
+    assert_eq!(document["recognition"]["warning"], Value::Null);
+}
+
+#[test]
+fn parakeet_is_offered_with_its_credit_and_never_recommended() {
+    let catalogue = shipped();
+    let parakeet = catalogue
+        .get("parakeet-tdt-0-6b-v3-q4-k")
+        .expect("Parakeet is offered");
+    assert_eq!(parakeet.kind, SpeechKind::Recognition);
+    assert_eq!(parakeet.engine, SpeechEngine::Parakeet);
+    assert_eq!(parakeet.licence.id, "CC-BY-4.0");
+    assert!(parakeet.needs_credit());
+    assert!(parakeet.credit.contains("https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"));
+    assert_eq!(parakeet.languages.len(), 25);
+    for language in ["it", "en", "de", "es", "fr"] {
+        assert!(parakeet.offers_language(language), "{language}");
+    }
+    assert!(parakeet.weak_in().is_empty());
+    for name in ["small-vm", "desktop-amd"] {
+        let hardware = host(name);
+        for language in [None, Some("it"), Some("en")] {
+            let chosen = recommend(&catalogue, &hardware, language);
+            assert_ne!(
+                chosen.recognition.map(|(model, _)| model.id.as_str()),
+                Some("parakeet-tdt-0-6b-v3-q4-k"),
+                "{name} {language:?}"
+            );
+        }
+    }
+    let tiny = catalogue.get("whisper-tiny-q5-1").expect("tiny");
+    assert_eq!(tiny.weak_in(), ["it"]);
+    let base = catalogue.get("whisper-base-q5-1").expect("base");
+    assert!(base.weak_in().is_empty());
+}
+
+const ENGINE_SOURCE: &str = "source_url = \"https://files.pythonhosted.org/packages/00/aa/x-1.0.tar.gz\"\nsource_sha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n";
+
+fn engine_entry(wheel: &[u8], source: &str) -> String {
+    format!(
+        "# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0\nschema_version = 1\nid = \"tiny-engine\"\nkind = \"engine\"\nname = \"tiny-engine\"\npublisher = \"TUR tests\"\nengine = \"piper\"\nrepository = \"https://pypi.org/project/x/\"\nrevision = \"1.0\"\nparameters = \"0\"\nlanguages = [\"mul\"]\nmemory_bytes = 1000000\nspeed_basis = \"A test entry.\"\nnote = \"Tests.\"\ncredit = \"none\"\nchecked = \"2026-11-16\"\n{source}[[files]]\nname = \"x-1.0-py3-none-any.whl\"\nurl = \"https://files.pythonhosted.org/packages/00/bb/x-1.0-py3-none-any.whl\"\nsize_bytes = {}\nsha256 = \"{}\"\n{LICENCE}",
+        wheel.len(),
+        digest(wheel)
+    )
+}
+
+#[test]
+fn an_engine_is_pinned_by_its_digest_and_names_its_source_archive() {
+    let wheel = b"PK a stand-in for a wheel, for tests only";
+    let entry = parse_speech_entry("tiny-engine.toml", &engine_entry(wheel, ENGINE_SOURCE))
+        .unwrap_or_else(|problems| panic!("{}", problems.join("\n")));
+    assert_eq!(entry.kind, SpeechKind::Engine);
+    // Without its source archive, an engine is refused.
+    let problems = parse_speech_entry("tiny-engine.toml", &engine_entry(wheel, ""))
+        .expect_err("refused");
+    assert!(problems.iter().any(|problem| problem.contains("source")), "{problems:?}");
+    // From anywhere but the Python Package Index, it is refused.
+    let elsewhere = engine_entry(wheel, ENGINE_SOURCE).replace(
+        "https://files.pythonhosted.org/packages/00/bb/",
+        "https://example.org/",
+    );
+    assert!(parse_speech_entry("tiny-engine.toml", &elsewhere).is_err());
+    // A model with a source archive is refused: only an engine has one.
+    let model = format!(
+        "{}{ENGINE_SOURCE}{}{LICENCE}",
+        header(
+            "tiny-whisper",
+            "recognition",
+            "whisper.cpp",
+            "[\"mul\"]",
+            "encode_ms_8_threads = 10\n"
+        ),
+        file_table("ggml-tiny-test.bin", MODEL_BYTES)
+    );
+    assert!(parse_speech_entry("tiny-whisper.toml", &model).is_err());
+    // The shipped Piper engine is the one every recommended voice needs.
+    let catalogue = shipped();
+    let piper = catalogue.voice_engine().expect("Piper is in the catalogue");
+    assert_eq!(piper.id, "piper-tts-1-8-0");
+    assert_eq!(piper.files[0].size_bytes, 34_131_442);
+    assert_eq!(
+        piper.files[0].sha256,
+        "25b4d3f31ff70c8fa7151908e00aaa5650cbdf16bca8fcf21299f3941b89a7d3"
+    );
+    assert_eq!(
+        piper.source_sha256.as_deref(),
+        Some("830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904")
+    );
+    assert_eq!(piper.licence.id, "GPL-3.0-or-later");
+    // The image's record of the same pins says the same (image/engine/piper.lock).
+    let lock = fs::read_to_string(repository().join("image/engine/piper.lock")).expect("the lock");
+    let value = |key: &str| -> String {
+        lock.lines()
+            .find_map(|line| line.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("{key} is not in piper.lock"))
+            .trim_matches('"')
+            .to_owned()
+    };
+    assert_eq!(value("PIPER_WHEEL"), piper.files[0].name);
+    assert_eq!(value("PIPER_WHEEL_URL"), piper.files[0].url);
+    assert_eq!(value("PIPER_WHEEL_SHA256"), piper.files[0].sha256);
+    assert_eq!(Some(value("PIPER_SOURCE_URL")), piper.source_url.clone());
+    assert_eq!(Some(value("PIPER_SOURCE_SHA256")), piper.source_sha256.clone());
+}
+
+/// A stand-in for python3: makes a "virtual environment" (a copy of
+/// itself), says where its packages go, "unpacks" a wheel by copying it,
+/// and runs `-m piper` as the stand-in Piper.
+fn fake_python(dir: &Path, piper: &Path) -> PathBuf {
+    let program = dir.join("python3");
+    executable(
+        &program,
+        &format!(
+            "#!/bin/sh\nme=\"$0\"\nif [ \"$1\" = -m ] && [ \"$2\" = venv ]; then\n  for last in \"$@\"; do :; done\n  mkdir -p \"$last/bin\" && cp \"$me\" \"$last/bin/python3\" && exit 0\nfi\nif [ \"$1\" = -I ] && [ \"$2\" = -c ]; then\n  echo \"$(dirname \"$(dirname \"$me\")\")/lib/python3.14/site-packages\"; exit 0\nfi\nif [ \"$1\" = -I ] && [ \"$2\" = -m ] && [ \"$3\" = zipfile ]; then\n  mkdir -p \"$6\" && cp \"$5\" \"$6/unpacked.whl\" && exit 0\nfi\nif [ \"$1\" = -m ] && [ \"$2\" = piper ]; then\n  shift 2; exec '{}' \"$@\"\nfi\nexit 9\n",
+            piper.display()
+        ),
+    );
+    program
+}
+
+#[test]
+fn piper_is_installed_on_first_use_from_its_checked_wheel_and_speaks_through_its_launcher() {
+    let dir = scratch("speech-engine");
+    let (catalogue, models) = tiny_speech(&dir);
+    let wheel = b"PK a stand-in for a wheel, for tests only";
+    fs::write(
+        catalogue.join("tiny-engine.toml"),
+        engine_entry(wheel, ENGINE_SOURCE),
+    )
+    .expect("entry");
+    let loaded = SpeechCatalogue::load(&catalogue)
+        .unwrap_or_else(|problems| panic!("{}", problems.join("\n")));
+    let engine = loaded.voice_engine().expect("the engine").clone();
+    let store = SpeechStore::in_models_folder(&models);
+    let folder = store.dir(&engine.id).expect("folder");
+    fs::create_dir_all(&folder).expect("folder");
+    fs::write(folder.join(&engine.files[0].name), wheel).expect("the wheel");
+    store.write_verified(&engine, 1).expect("record");
+    // Checked but not installed: not usable.
+    assert_eq!(store.state(&engine).0, InstallState::Damaged);
+    assert!(store.launcher(&engine).is_none());
+
+    let piper = fake_piper(&dir);
+    let python = fake_python(&dir, &piper);
+    install_engine(&python, &folder, &folder.join(&engine.files[0].name))
+        .unwrap_or_else(|(code, detail)| panic!("{code}: {detail}"));
+    assert!(folder.join("venv/lib/python3.14/site-packages/unpacked.whl").is_file());
+    let launcher = folder.join(ENGINE_LAUNCHER);
+    let script = fs::read_to_string(&launcher).expect("the launcher");
+    assert!(script.contains("-m piper"), "{script}");
+    assert_eq!(store.state(&engine).0, InstallState::Installed);
+    assert_eq!(store.launcher(&engine), Some(launcher));
+
+    // speech tts with no --piper speaks through the installed engine.
+    let out = dir.join("answer.wav");
+    let output = run_with_input(
+        &[
+            "speech",
+            "tts",
+            "--voice",
+            "tiny-voice",
+            "--output",
+            out.to_str().expect("UTF-8"),
+            "--json",
+            "--speech-catalogue",
+            catalogue.to_str().expect("UTF-8"),
+            "--models-dir",
+            models.to_str().expect("UTF-8"),
+        ],
+        "Ciao.".as_bytes(),
+    );
+    assert!(output.status.success(), "{}", stderr_text(&output));
+    assert!(out.is_file());
+
+    // Without Python, nothing is installed and the code says why.
+    let refused = install_engine(Path::new("/nonexistent/python3"), &folder, &folder)
+        .expect_err("refused");
+    assert_eq!(refused.0.as_str(), "TUR-AI-LOCAL-030");
+}
+
+#[test]
+fn without_piper_a_voice_cannot_speak_and_the_code_says_how_to_get_it() {
+    let dir = scratch("speech-no-engine");
+    let (catalogue, models) = tiny_speech(&dir);
+    let out = dir.join("answer.wav");
+    let output = run_with_input(
+        &[
+            "speech",
+            "tts",
+            "--voice",
+            "tiny-voice",
+            "--output",
+            out.to_str().expect("UTF-8"),
+            "--speech-catalogue",
+            catalogue.to_str().expect("UTF-8"),
+            "--models-dir",
+            models.to_str().expect("UTF-8"),
+        ],
+        "Ciao.".as_bytes(),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let errors = stderr_text(&output);
+    assert!(errors.starts_with("TUR-AI-LOCAL-030"), "{errors}");
+    assert!(errors.contains("speech ensure piper-tts-1-8-0"), "{errors}");
 }
 
 // ------------------------------------------------- stand-in engines

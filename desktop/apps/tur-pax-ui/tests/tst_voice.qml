@@ -22,7 +22,12 @@ import Tur.Kit.Pax as Pax
 //  - a live conversation: the microphone lit the whole time, the person's
 //    words and P@x's, an interruption, End and the stop key end it;
 //  - setup offers the free local voice first, with what it downloads, and a
-//    provider's live engine only with its consent ticked.
+//    provider's live engine only with its consent ticked;
+//  - the owner's decisions of 16 November 2026: the language follows the
+//    system's; a model weak in Italian is said plainly and better ones are
+//    offered, with their size and credit; "Always wait for me to press
+//    Send" is a setting, off; a provider whose key is set is suggested
+//    under the local engine, with its price a minute.
 Item {
     id: root
 
@@ -227,9 +232,12 @@ Item {
             verify(findChild(flow, "voice-it_IT-paola-medium") !== null, "an Italian voice")
             const local = findChild(flow, "liveEngine-local")
             const provider = findChild(flow, "liveEngine-openai-realtime")
+            const other = findChild(flow, "liveEngine-gemini-live")
             verify(local.selected, "live conversation on this computer is chosen")
             verify(local.mapToItem(flow, 0, 0).y < provider.mapToItem(flow, 0, 0).y, "on this computer comes first")
-            verify(provider.subtitle.indexOf(Words.liveOptional) === 0, "a provider is optional and paid")
+            verify(other.subtitle.indexOf(Words.liveOptional) === 0, "a provider is optional and paid")
+            verify(findChild(flow, "voiceEngine-piper-tts-1.8.0").text.indexOf("GPL-3.0-or-later, runs as a separate program") >= 0,
+                   "Piper is named with its licence, as a separate program")
             verify(!findChild(flow, "answersAloud").checked, "P@x answers out loud is off")
             const needed = host.client.voiceStatus.download_bytes_needed
             verify(needed > 0)
@@ -243,6 +251,8 @@ Item {
             const chosen = JSON.parse(called("SetVoiceSettings")[0].args[0])
             compare(chosen.enabled, true)
             compare(chosen.spoken_replies, false)
+            compare(chosen.transcript_check, "show", "P@x does not wait for Send unless asked")
+            verify(chosen.recognition === undefined, "the recommended model is left to the service")
             compare(chosen.live.engine, "local")
             verify(chosen.live_consent_version === undefined)
             tryVerify(() => flow.step === "ready", 5000)
@@ -262,6 +272,102 @@ Item {
             const chosen = JSON.parse(called("SetVoiceSettings")[0].args[0])
             compare(chosen.live.engine, "openai-realtime")
             compare(chosen.live_consent_version, "1")
+        }
+
+        function test_the_language_follows_the_system() {
+            host.reach(host.state("setup-voice"), this)
+            const flow = host.view
+            const line = findChild(flow, "voiceLanguageLine")
+            compare(line.text, Words.voiceLanguageLine({ setting: "auto", system: "it" }))
+            verify(line.text.indexOf("Italiano") >= 0, "the system's language, in its own name")
+            const same = findChild(flow, "language-auto")
+            compare(same.title, Words.voiceAutomatic)
+            verify(same.selected, "same as the system is the default")
+            const english = findChild(flow, "language-en")
+            verify(same.mapToItem(flow, 0, 0).y < english.mapToItem(flow, 0, 0).y, "same as the system comes first")
+            host.stop()
+            fixture.startAgent()
+            wait(0)
+            host.reach(host.state("setup-voice-small"), this)
+            const detected = findChild(host.view, "voiceLanguageLine")
+            verify(detected.text.indexOf(Words.voiceDetected) >= 0, "no system language P@x speaks: detected")
+        }
+
+        function test_a_weak_model_is_said_plainly_and_a_better_one_is_offered() {
+            host.reach(host.state("setup-voice-small"), this)
+            const flow = host.view
+            const status = host.client.voiceStatus
+            const warning = findChild(flow, "recognitionWarning")
+            verify(warning.visible && warning.text === status.recognition.warning, "the service's own words, plainly")
+            const tiny = findChild(flow, "recognition-whisper-tiny-q5-1")
+            const base = findChild(flow, "recognition-whisper-base-q5-1")
+            const parakeet = findChild(flow, "recognition-parakeet-tdt-0.6b-v3-q4-k")
+            verify(tiny.selected, "the recommended model is chosen")
+            verify(tiny.subtitle.indexOf(Words.voiceRecommended) === 0)
+            verify(base.subtitle.indexOf(Words.tierLabel("slow")) >= 0, "how it suits this computer")
+            verify(base.subtitle.indexOf(Words.bytes(59707625)) >= 0, "what it downloads")
+            verify(parakeet.subtitle.indexOf("Credit: Parakeet TDT 0.6B v3 by NVIDIA, CC BY 4.0") >= 0, "the credit its licence asks for")
+            mouseClick(base)
+            verify(base.selected && !tiny.selected)
+            const expected = status.download_bytes_needed - 32152673 + 59707625
+            const button = findChild(flow, "voiceSwitchOnButton")
+            verify(button.text.indexOf(Words.bytes(expected)) >= 0, "the size of what is chosen is shown")
+            mouseClick(button)
+            const prepared = called("PrepareVoice")
+            compare(prepared.length, 1)
+            const asked = JSON.parse(prepared[0].args[0])
+            compare(asked.download_bytes, expected, "the size that was shown")
+            verify(asked.models.indexOf("whisper-base-q5-1") >= 0, "the chosen model is downloaded")
+            verify(asked.models.indexOf("whisper-tiny-q5-1") < 0, "the recommended one is not")
+            verify(asked.models.indexOf("piper-tts-1.8.0") >= 0, "Piper comes with the voices")
+            tryVerify(() => called("SetVoiceSettings").length === 1, 10000)
+            const chosen = JSON.parse(called("SetVoiceSettings")[0].args[0])
+            compare(chosen.recognition.model, "whisper-base-q5-1")
+        }
+
+        function test_always_wait_for_send_is_a_setting_off_by_default() {
+            host.reach(host.state("setup-voice"), this)
+            const flow = host.view
+            const box = findChild(flow, "alwaysWait")
+            verify(box.visible && !box.checked, "off by default")
+            compare(box.text, Words.voiceAlwaysWait)
+            mouseClick(box)
+            verify(box.checked)
+            mouseClick(findChild(flow, "voiceSwitchOnButton"))
+            tryVerify(() => called("SetVoiceSettings").length === 1, 10000)
+            compare(JSON.parse(called("SetVoiceSettings")[0].args[0]).transcript_check, "wait")
+        }
+
+        function test_a_provider_whose_key_is_set_is_suggested_under_the_local_engine() {
+            host.reach(host.state("setup-voice"), this)
+            const flow = host.view
+            const suggestion = host.client.voiceStatus.live.suggestion
+            const local = findChild(flow, "liveEngine-local")
+            const suggested = findChild(flow, "liveEngine-" + suggestion.engine)
+            const other = findChild(flow, "liveEngine-gemini-live")
+            verify(local.selected, "the local engine stays the default")
+            verify(local.mapToItem(flow, 0, 0).y < suggested.mapToItem(flow, 0, 0).y, "local first")
+            verify(suggested.mapToItem(flow, 0, 0).y < other.mapToItem(flow, 0, 0).y, "the suggestion right under it")
+            compare(suggested.subtitle, Words.liveSuggestion(suggestion))
+            verify(suggested.subtitle.indexOf("gpt-realtime-2.1-mini") >= 0 && suggested.subtitle.indexOf("0.03 USD") >= 0,
+                   "its cheapest model and its price a minute")
+            verify(suggested.subtitle.indexOf("your voice is sent to OpenAI") >= 0)
+            verify(findChild(suggested, "liveSuggestion").visible)
+            mouseClick(suggested)
+            const button = findChild(flow, "voiceSwitchOnButton")
+            verify(!button.enabled, "not before its consent is ticked")
+            mouseClick(findChild(flow, "liveConsentCheck"))
+            mouseClick(button)
+            tryVerify(() => called("SetVoiceSettings").length === 1, 10000)
+            const chosen = JSON.parse(called("SetVoiceSettings")[0].args[0])
+            compare(chosen.live.engine, suggestion.engine)
+            compare(chosen.live.model, "gpt-realtime-2.1-mini")
+            host.stop()
+            fixture.startAgent()
+            wait(0)
+            host.reach(host.state("setup-voice-small"), this)
+            const none = findChild(host.view, "liveEngine-openai-realtime")
+            verify(!findChild(none, "liveSuggestion").visible, "no key, no suggestion")
         }
 
         function test_not_now_leaves_voice_off() {

@@ -90,21 +90,21 @@ RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
 RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
 
 # ---- build stage: speech for P@x's voice -----------------------------------------
-# whisper.cpp's whisper-cli, built from its source at the version pinned in
-# image/engine/whisper-cpp.lock exactly as llama.cpp above (Fedora 45's
-# whisper-cpp has no whisper-cli, no AVX2 kernels and no Vulkan), and the
-# Piper wheel pinned in image/engine/piper.lock, fetched and checked here and
-# installed in the final stage. No model and no voice: they are downloaded at
-# the person's request (docs/architecture/pax-voice.md, sections 3 and 9;
+# whisper.cpp's whisper-cli and parakeet-cli, built from its source at the
+# version pinned in image/engine/whisper-cpp.lock exactly as llama.cpp above
+# (Fedora 45's whisper-cpp has no whisper-cli, no AVX2 kernels and no
+# Vulkan). Piper is not in the image (the owner's decision of 16 November
+# 2026): tur-ai-local downloads it on first use with the voices, checked by
+# its SHA-256. No model and no voice either: they are downloaded at the
+# person's request (docs/architecture/pax-voice.md, sections 3 and 9;
 # image/README.md, "Speech").
 FROM ${BASE_IMAGE}@${BASE_DIGEST} AS speech
 
 COPY image/engine/ /src/image/engine/
 
-# With network: the build tools, the source archive and the wheel, each
-# checked against its SHA-256. Nothing is compiled here.
-RUN /bin/sh /src/image/engine/whisper-cpp.sh fetch && \
-    /bin/sh /src/image/engine/piper.sh fetch
+# With network: the build tools and the source archive, checked against its
+# SHA-256. Nothing is compiled here.
+RUN /bin/sh /src/image/engine/whisper-cpp.sh fetch
 
 # No network: compiled from the checked source with the tools above.
 RUN --network=none /bin/sh /src/image/engine/whisper-cpp.sh build
@@ -135,19 +135,21 @@ COPY --from=programs /out/ /
 # /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
 COPY --from=engine /out/ /
 
-# What the speech stage made (image/engine/whisper-cpp.sh): whisper-cli with
-# its libraries and backends in /usr/libexec/tur/whisper.cpp, the link
-# /usr/bin/whisper-cli, its licences, and its line for
-# built-from-source.tsv. Then Piper (image/engine/piper.sh install): Fedora's
-# onnxruntime and pathvalidate, and the checked wheel in a virtual
-# environment under /usr/libexec/tur/piper. Both must start here.
+# What the speech stage made (image/engine/whisper-cpp.sh): whisper-cli and
+# parakeet-cli with their libraries and backends in
+# /usr/libexec/tur/whisper.cpp, the links in /usr/bin, their licences, and
+# their line for built-from-source.tsv. Then Piper's dependencies, which are
+# not GPL and are Fedora packages (image/engine/piper.sh deps): onnxruntime
+# and pathvalidate. Piper itself (GPL, with espeak-ng) is downloaded on first
+# use by tur-ai-local into the person's speech store.
 COPY --from=speech /out/ /
-RUN --mount=type=bind,from=speech,source=/piper,target=/run/tur-piper \
+RUN --mount=type=bind,source=image/engine,target=/run/tur-engine \
     set -eu; \
     cat /usr/lib/tur/built-from-source.d/*.tsv >> /usr/lib/tur/built-from-source.tsv; \
     rm -rf /usr/lib/tur/built-from-source.d; \
-    /bin/sh /run/tur-piper/piper.sh install; \
+    /bin/sh /run/tur-engine/piper.sh deps; \
     /usr/bin/whisper-cli --help > /dev/null || { echo "whisper-cli does not run in this image" >&2; exit 1; }; \
+    /usr/bin/parakeet-cli --help > /dev/null || { echo "parakeet-cli does not run in this image" >&2; exit 1; }; \
     cat /usr/lib/tur/built-from-source.tsv
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in

@@ -455,7 +455,9 @@ fn malformed(detail: impl AsRef<str>) -> ProviderError {
 }
 
 fn tls_config() -> Result<Arc<rustls::ClientConfig>, ProviderError> {
-    let roots: rustls::RootCertStore = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
+    let roots = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
     let config = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::ring::default_provider(),
     ))

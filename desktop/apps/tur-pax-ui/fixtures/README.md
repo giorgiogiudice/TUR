@@ -37,7 +37,7 @@ like the others.
 
 | File | What it is |
 |---|---|
-| `voice/status/*.json` | `GetVoiceStatus`: `off` (voice not switched on; the free local models and their sizes), `unavailable` (on, models not downloaded), `ready` |
+| `voice/status/*.json` | `GetVoiceStatus`: `off` (voice not switched on; the free local models and their sizes, Piper as an engine downloaded with the voices, the system's language Italian, a provider live engine suggested because its key is set), `small` (the same on a 2-processor computer: Whisper tiny with the warning that its Italian is weak, Whisper base and Parakeet as alternatives; no system language P@x speaks; no suggestion), `unavailable` (on, models not downloaded), `ready` |
 | `voice/turns/*.json` | One spoken turn, signal by signal: `show` (heard, shown, a task follows: the recorded `two-tools`), `wait` (heard while another program played sound: it waits to be sent), `empty` (nothing was heard). Signals marked `after_stop` come after the person stops speaking (`StopListening`) |
 | `voice/live.json` | A live conversation: heard and said, an interruption, its end (held until `EndLiveSession`, marked `after_end`) |
 | `voice/prepare.json` | `VoiceProgress` of `PrepareVoice`: the free local models downloaded and checked |

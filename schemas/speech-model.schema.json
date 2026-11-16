@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/speech-model.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "TUR speech catalogue entry",
-  "description": "One speech recognition model, voice activity detector or voice that TUR offers to run on the person's own computer for P@x's voice (docs/architecture/pax-voice.md). Written in TOML, one file per entry, in services/tur-ai-local/speech/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/speech.rs) is authoritative and also enforces: the file is named <id>.toml; every file URL names the pinned revision and ends with the file's name; a recognition model is one .bin file with encode_ms_8_threads; a voice detector is one .bin file; a voice is one .onnx file and its .onnx.json, speaks one language, has a sample_rate and [voice]; default_for names languages the voice speaks, and no language has two default voices; memory_bytes is at least the files; ids and file names are unique.",
+  "description": "One speech recognition model, voice activity detector, voice or engine (a program downloaded on first use: Piper) that TUR offers to run on the person's own computer for P@x's voice (docs/architecture/pax-voice.md). Written in TOML, one file per entry, in services/tur-ai-local/speech/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/speech.rs) is authoritative and also enforces: the file is named <id>.toml; every file URL names the pinned revision (40 hexadecimal digits) and ends with the file's name, except an engine's, which is under https://files.pythonhosted.org/ with source_url and source_sha256; a recognition model is used by whisper.cpp or by its parakeet-cli; a recognition model is one .bin file with encode_ms_8_threads; a voice detector is one .bin file; an engine is one .whl file; a voice is one .onnx file and its .onnx.json, speaks one language, has a sample_rate and [voice]; default_for names languages the voice speaks, and no language has two default voices; memory_bytes is at least the files; ids and file names are unique.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,7 +39,8 @@
       "enum": [
         "recognition",
         "synthesis",
-        "voice-activity"
+        "voice-activity",
+        "engine"
       ]
     },
     "name": {
@@ -56,7 +57,8 @@
       "description": "The program that uses it.",
       "enum": [
         "whisper.cpp",
-        "piper"
+        "piper",
+        "parakeet"
       ]
     },
     "repository": {
@@ -64,9 +66,9 @@
       "$ref": "#/$defs/https_url"
     },
     "revision": {
-      "description": "The commit the URLs are pinned to.",
+      "description": "The commit the URLs are pinned to (40 lower-case hexadecimal digits); for an engine from the Python Package Index, its release, the files being pinned by their SHA-256.",
       "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
+      "minLength": 1
     },
     "parameters": {
       "description": "Its size as the publisher states it.",
@@ -169,6 +171,16 @@
     },
     "licence": {
       "$ref": "#/$defs/licence"
+    },
+    "source_url": {
+      "description": "An engine's source archive, a .tar.gz under https://files.pythonhosted.org/, offered with the program as the GPL asks. Only an engine has one, and it must.",
+      "type": "string",
+      "pattern": "^https://files\\.pythonhosted\\.org/.*\\.tar\\.gz$"
+    },
+    "source_sha256": {
+      "description": "The SHA-256 of the source archive.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   },
   "$defs": {

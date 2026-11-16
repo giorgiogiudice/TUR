@@ -58,12 +58,20 @@
           "price_per_minute": 0.03,
           "transport": "websocket"
         }
-      ]
+      ],
+      "suggestion": {
+        "engine": "openai-realtime",
+        "name": "OpenAI Realtime",
+        "company": "OpenAI",
+        "model": "gpt-realtime-2.1-mini",
+        "price_per_minute": 0.03,
+        "currency": "USD"
+      }
     },
     "microphone_open": false,
     "problem": null,
     "recognition": {
-      "download_bytes": 59707625,
+      "download_bytes": 32152673,
       "engine_found": true,
       "installed": true,
       "licence": {
@@ -72,13 +80,18 @@
         "restricts_use": false,
         "summary": "MIT: free to use, change and share"
       },
-      "model": "whisper-base-q5_1",
-      "name": "Whisper base, quantised (Q5_1)",
+      "model": "whisper-tiny-q5-1",
+      "name": "Whisper tiny (5-bit)",
       "reasons": [
         "Fits in this computer's memory.",
         "Expected wait after you stop speaking: about 0.7 s."
       ],
-      "tier": "runs-well"
+      "tier": "runs-well",
+      "id": "whisper-tiny-q5-1",
+      "weak_in": [
+        "it"
+      ],
+      "warning": "Whisper tiny is what this computer runs well, but it understands Italian poorly. Whisper base understands Italian better, and is slower here."
     },
     "session": null,
     "settings": {
@@ -148,6 +161,52 @@
       "available": false,
       "explanation": "A wake word would keep the microphone open and listen, on this computer only, for P@x's name. It is not in this version.",
       "on": false
-    }
+    },
+    "language": {
+      "setting": "auto",
+      "system": "it",
+      "effective": "it"
+    },
+    "engines": [
+      {
+        "id": "piper-tts-1.8.0",
+        "name": "Piper 1.8.0",
+        "installed": true,
+        "download_bytes": 34131442,
+        "licence": {
+          "id": "GPL-3.0-or-later",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "GPL-3.0-or-later: a separate program that P@x runs; its source is offered"
+        },
+        "credit": "none"
+      }
+    ],
+    "alternatives": [
+      {
+        "id": "whisper-base-q5-1",
+        "name": "Whisper base (5-bit)",
+        "download_bytes": 59707625,
+        "installed": false,
+        "tier": "slow",
+        "reasons": [
+          "Fits in this computer's memory.",
+          "Expected wait after you stop speaking: about 6 s."
+        ],
+        "expected_ms": 5920,
+        "languages": [
+          "mul"
+        ],
+        "wer_it_fleurs": 17.9,
+        "licence": {
+          "id": "MIT",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "MIT: free to use, change and share"
+        },
+        "credit": "none",
+        "note": "Good English, fair Italian."
+      }
+    ]
   }
 }

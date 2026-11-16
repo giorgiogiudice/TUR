@@ -47,7 +47,7 @@ SUMMARY
 | Nine codes `TUR-AI-VOICE-001` to `-009` | `services/tur-pax/src/faults.rs` |
 | The provider-neutral live session (`LiveSession`, `LiveEvent`, `LiveConfig`, `LivePrices`), a blocking WebSocket client on rustls (no new crate), the OpenAI Realtime and Gemini Live families, a scripted fake | `services/tur-pax-providers/src/{live,live_openai,live_gemini,ws}.rs` (new); `docs/architecture/pax-providers.md` §16 |
 | Speech in local AI: catalogue (4 Whisper models, Silero VAD, 6 voices), tiers per computer, `speech models|recommend|ensure|cancel|remove|stt|tts`, codes `TUR-AI-LOCAL-030` to `-035` | `services/tur-ai-local/{speech/,src/speech.rs,src/cli.rs,src/codes.rs}`; `schemas/{speech-model,ai-local-speech}.schema.json`; `docs/architecture/local-ai.md` §12 |
-| The image: whisper.cpp v1.9.5 built from its pinned source like llama.cpp; the piper-tts 1.8.0 wheel pinned by SHA-256 in a virtual environment; the speech catalogue. No model, no voice | `image/Containerfile`, `image/engine/{whisper-cpp,piper}.{sh,lock}`, `image/files.tsv`, `image/README.md` |
+| The image: whisper.cpp v1.9.5 (`whisper-cli`, `parakeet-cli`) built from its pinned source like llama.cpp; Fedora's onnxruntime and pathvalidate for Piper; the speech catalogue; the list of live engines; PipeWire's echo canceller configuration. No model, no voice, no Piper (first use) | `image/Containerfile`, `image/engine/{whisper-cpp,piper}.{sh,lock}`, `image/files.tsv`, `image/README.md` |
 | The window: microphone button, level meter, transcript in the field, "Talk with P@x", the live foot with End, spoken and live rows, the setup's voice step (free local voice first; providers "optional · paid with your own key") | `desktop/apps/tur-pax-ui/**`; `docs/architecture/tur-pax-ui.md` §13 |
 | Tests (none run) | `services/tur-pax/src/{voice,audio,livelist}.rs` unit tests; `services/tur-pax/tests/voice.rs` (new), `tests/service.rs` (six voice tests), `tests/agent1_interface.rs`; `services/tur-pax-providers/tests/live.rs` and `ws.rs` units; `services/tur-ai-local/tests/speech.rs`; `desktop/apps/tur-pax-ui/tests/tst_voice.qml` and unit tests |
 | Integration, by hand only | `.github/workflows/pax-voice.yml` (`workflow_dispatch` only), `services/tur-ai-local/ci/speech_ci.py`, `tests/pax/voice_e2e.py` |
@@ -59,13 +59,13 @@ SUMMARY
 | whisper.cpp | v1.9.5 (2026-10-06), tag commit `d1be6fde…` | MIT | active (push 2026-11-16) | `whisper-cpp-1.8.3-4.fc45`: libraries only, no `whisper-cli`, AVX/AVX2/FMA off, no Vulkan | built from source in the image, CPU variants + Vulkan |
 | Whisper weights (ggml, `ggerganov/whisper.cpp` @ `5359861c…`) | tiny/base/small q5_1, large-v3-turbo q5_0 | MIT | | | downloaded on first use, SHA-256 pinned |
 | Silero VAD v6.2.0 (ggml) | | MIT | | | downloaded on first use |
-| Piper (piper1-gpl) | v1.8.0 (2026-09-04); rhasspy/piper archived 2025-10-06 | GPL-3.0-or-later, run as a separate program, never linked | active, "looking for maintainers" | `python3-piper-tts-1.4.2`: too old for the retrained voices | PyPI wheel, SHA-256 pinned, in a venv on Fedora's onnxruntime 1.26 |
+| Piper (piper1-gpl) | v1.8.0 (2026-09-04); rhasspy/piper archived 2025-10-06 | GPL-3.0-or-later, run as a separate program, never linked | active, "looking for maintainers" | `python3-piper-tts-1.4.2`: too old for the retrained voices | on first use with the voices: the PyPI wheel (34 131 442 B), SHA-256 pinned, with its source archive for the GPL's offer, in a private venv on Fedora's onnxruntime 1.26 |
+| Parakeet TDT 0.6B v3 (ggml, `ggml-org/parakeet-GGUF` @ `35156454…`, q4_k, 415 611 879 B) | | CC-BY-4.0 (credit shown) | | | optional, downloaded on first use; run by whisper.cpp 1.9's `parakeet-cli` |
 | Voices (`rhasspy/piper-voices` @ `e9ab671f…`) | en_US ljspeech (public domain), en_GB cori (CC BY 4.0), it_IT paola (CC0 on a CC BY 4.0 base), de thorsten (CC0), es davefx (CC0), fr siwis (CC BY 4.0) | per voice, the whole training chain | | | downloaded on first use; CC BY credits shown |
 | Not offered | lessac (research only), libritts_r (from lessac), amy (no licence), riccardo x_low (unverified), Coqui XTTS (non-commercial), Moshi and other open speech-to-speech models (GPU-only, no Italian, no tools) | | | | |
 
 Compared for recognition and not chosen: Vosk (worse Italian), Moonshine
-(no Italian), Distil-Whisper (English only), Parakeet TDT 0.6B v3 (CC-BY-4.0,
-strong Italian: a follow-up), sherpa-onnx.
+(no Italian), Distil-Whisper (English only), sherpa-onnx.
 
 ## 3. Sizes and expected speed (estimates; nothing measured)
 
@@ -120,13 +120,14 @@ providers' price per minute (0.096 / 0.030 / 0.029 USD for gpt-realtime-2.1,
 - No streaming recognition: the transcript appears when the person stops.
 - The wake word, a provider's single-turn recognition, WebRTC, GPT-Live, spoken
   approval, the GlobalShortcuts portal's press and release: not built.
-- The local live engine's barge-in by voice needs PipeWire's echo canceller,
-  which the image does not load yet.
+- The local live engine's barge-in by voice relies on PipeWire's echo
+  canceller, which the image now configures; it is not verified that
+  Fedora 45's PipeWire ships the WebRTC canceller it names.
 - Gemini Live: two wire details unverified; its sessions end at about 10 to
   15 minutes (session resumption not built).
-- The image now carries a GPL program (Piper with espeak-ng): its source is
-  recorded for the offer the GPL requires; the image build gets longer
-  (whisper.cpp compiled from source).
+- Piper with espeak-ng (GPL) is not in the image; it is downloaded on first
+  use from PyPI, and its source archive is pinned for the offer the GPL
+  requires. The image build gets longer (whisper.cpp compiled from source).
 - `local-ai.yml` (existing, heavy) runs on this pull request because
   `services/tur-ai-local/**` changed.
 
@@ -169,8 +170,9 @@ voice it should mean what it says. The interface it needs exists on
 > the computer as separate programs driven by `tur-ai-local`; models and
 > voices are downloaded on first use from their publishers, pinned by
 > SHA-256, chosen per hardware tier; none is in the image. whisper.cpp is
-> built from source in the image like llama.cpp; Piper is installed from its
-> pinned wheel because Fedora's is too old. (2) The session service opens the
+> built from source in the image like llama.cpp; Piper, whose Fedora package
+> is too old, is downloaded on first use with the voices, from its pinned
+> wheel, and never put in the image. (2) The session service opens the
 > microphone with PipeWire's `pw-record` only while P@x's indicator or the
 > asking window shows it; push-to-talk is the only activation; the wake word
 > is not built. (3) A spoken request is an ordinary task with its origin in
@@ -185,45 +187,39 @@ voice it should mean what it says. The interface it needs exists on
 > free local live engine is a cascade through the normal task loop.
 >
 > *Consequences.* No audio leaves the computer unless the person chose a
-> provider's live engine. The image grows by whisper.cpp (~tens of MB) and
-> Piper with onnxruntime, and carries one more GPL program. Small computers
+> provider's live engine. The image grows by whisper.cpp and Fedora's
+> onnxruntime; no GPL speech program is in it. PipeWire's echo canceller is
+> configured so that the person can interrupt P@x by voice. Small computers
 > get a weak model (tiny) and slow live turns. The interface version of
 > `org.tur.Agent1` stays 1 (additions only). *Rollback:* voice is off by
 > default; removing it is reverting the pull request; nothing else depends
 > on it.
 
-## 9. Owner decisions
+## 9. Owner decisions (16 November 2026)
 
-1. **Default languages.** Built: English and Italian first, then German,
-   Spanish and French, with `auto` (the model detects). Should Italian be
-   the default where the system language is Italian, or always `auto`?
-2. **Should the wake word ever be on by default?** Recommended: never; it
-   stays an option the person turns on, once a detector exists (Vosk's small
-   models are the candidate). The setting and its explanation exist.
-3. **Default voices.** Built: `en_US-ljspeech-medium` (public domain) and
-   `it_IT-paola-medium` (CC0 on a CC BY 4.0 base: Hi-Fi TTS is credited). A
-   male Italian voice clean enough to offer was not found.
-4. **The free tier's recognition model on small machines.** Built: tiny on
-   2-processor machines (fast, weak in Italian), base on 4 to 8. Accept tiny,
-   or prefer base and say it is slow?
-5. **Transcript before acting.** Built: push-to-talk turns are shown and
-   sent, their first change waiting 2 s; other sound makes them wait for a
-   press. Should every spoken request wait for a press instead (stricter,
-   not hands-free)?
-6. **Spoken replies.** Off by default, local voice. Should replies use a
-   provider's voice when a provider engine is configured? Recommended: local.
-7. **Default live engine.** Built: local. If a provider is to be suggested,
-   which: `gpt-realtime-2.1-mini` (cheapest OpenAI, ~0.03 USD a minute) or
-   `gemini-3.8-live` (~0.03 USD a minute, does not train on paid-tier data)?
-8. **The live session's silence timeout.** Built: 60 s with no speech and no
-   task running (10 to 3600 allowed).
-9. **Echo cancellation.** Load PipeWire's echo canceller in the image so
-   that the person's voice can interrupt P@x in the local live engine?
-10. **Parakeet TDT 0.6B v3** (CC-BY-4.0, much better Italian, runs in
-    whisper.cpp 1.9's `parakeet-cli`): add to the catalogue with its
-    attribution?
-11. **Piper in the image** (a GPL program, Python and onnxruntime, about
-    tens of MB): accept, or install it on first use like the voices?
+The owner answered with "I trust your choices". These are the owner's
+decisions, recorded in [pax-voice.md](../architecture/pax-voice.md) section
+11, and applied in the code where they change a default (second commit of
+this pull request).
+
+| # | Decision | Applied in |
+|---|---|---|
+| 1 | Recognition follows the system's language when P@x speaks it (an Italian system defaults to Italian); automatic detection otherwise | `voice::system_language`, `effective_language`; the session's locale in `Paths::locale`; `GetVoiceStatus` `language`; the voice setup says "follows your system" |
+| 2 | The wake word is never on by default (a standing rule); it stays built off and refused | unchanged |
+| 3 | Voices: English `en_US-ljspeech-medium`, Italian `it_IT-paola-medium`. **Follow-up:** a male Italian voice clean through its training chain | unchanged; section 6 |
+| 4 | Tiers kept (tiny on 2 processors, base on 4 to 8); where tiny is chosen the setup says plainly that its Italian is weak and offers base | `speech recommend`: `recognition.weak_in`, `recognition.warning`, `alternatives`; the voice setup |
+| 5 | The 2 s on screen before the first change stays, plus a setting "Always wait for me to press Send" | `transcript_check` `wait`; setup and settings |
+| 6 | Spoken replies in a local voice by default (still off until turned on) | unchanged |
+| 7 | Live engine local by default; with the person's key for a provider, that provider's cheapest live model is suggested with its price a minute (OpenAI `gpt-realtime-2.1-mini`, about 0.030 USD; Google `gemini-3.8-live`, about 0.029 USD) | `GetVoiceStatus` `live.suggestion`; the voice setup; a service test |
+| 8 | Silence timeout 60 s | unchanged |
+| 9 | PipeWire's echo canceller loaded, configuration only | `image/rootfs/usr/share/pipewire/pipewire.conf.d/60-tur-echo-cancel.conf`; P@x captures from and plays into its devices when `pw-dump` shows them (`voice::echo_cancelled_source`, `ECHO_SOURCE`, `ECHO_SINK`) |
+| 10 | Parakeet TDT 0.6B v3 offered as an optional, better recognition model for Italian and other European languages, with its CC BY 4.0 credit | speech catalogue `parakeet-tdt-0-6b-v3-q4-k`; `parakeet-cli` built with whisper.cpp; `speech stt` runs it; listed in `alternatives` |
+| 11 | Piper (and its espeak-ng) downloaded on first use with the voices, checked by digest, not in the image; the source stays pinned for the GPL's offer | speech catalogue `piper-tts-1-8-0` (kind `engine`); `speech ensure` installs it in a private virtual environment; the image keeps only Fedora's onnxruntime and pathvalidate |
+
+Not verified, from these decisions: that Fedora 45's PipeWire ships the
+WebRTC canceller the configuration names; what `parakeet-cli` prints (its
+output is cleaned by rule and checked by the `pax-voice` workflow); that the
+Piper wheel runs on Fedora 45's Python with its onnxruntime.
 
 ## 10. Next safe action
 

@@ -93,9 +93,14 @@ impl Microphone {
     /// `TUR-AI-VOICE-003` if the capture program cannot be started.
     pub fn open(
         program: &Path,
+        target: Option<&str>,
         on_level: Box<dyn Fn(f64) + Send>,
     ) -> Result<Microphone, Fault> {
-        let mut child = Command::new(program)
+        let mut command = Command::new(program);
+        if let Some(target) = target {
+            command.args(["--target", target]);
+        }
+        let mut child = command
             .args([
                 "--raw",
                 "--rate",
@@ -225,8 +230,12 @@ impl Speaker {
     /// # Errors
     ///
     /// `TUR-AI-VOICE-006` if the playing program cannot be started.
-    pub fn start(program: &Path, rate: u32) -> Result<Speaker, Fault> {
-        let mut child = Command::new(program)
+    pub fn start(program: &Path, rate: u32, target: Option<&str>) -> Result<Speaker, Fault> {
+        let mut command = Command::new(program);
+        if let Some(target) = target {
+            command.args(["--target", target]);
+        }
+        let mut child = command
             .args(["--raw", "--rate"])
             .arg(rate.to_string())
             .args([
@@ -491,6 +500,7 @@ mod tests {
         let seen = Arc::clone(&levels);
         let microphone = Microphone::open(
             &record,
+            None,
             Box::new(move |value| seen.lock().unwrap_or_else(PoisonError::into_inner).push(value)),
         )
         .expect("opened");
@@ -509,7 +519,7 @@ mod tests {
 
     #[test]
     fn a_missing_capture_program_is_a_microphone_fault() {
-        let refused = Microphone::open(Path::new("/nonexistent/pw-record"), Box::new(|_| {}))
+        let refused = Microphone::open(Path::new("/nonexistent/pw-record"), None, Box::new(|_| {}))
             .err()
             .expect("refused");
         assert_eq!(refused.code.as_str(), "TUR-AI-VOICE-003");

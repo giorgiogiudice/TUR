@@ -80,6 +80,33 @@ on. The wake word is not available in this version of TUR.";
 /// The languages P@x offers for speech, beside `auto`.
 pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr"];
 
+/// The echo-cancelled microphone TUR's PipeWire configuration makes
+/// (`image/rootfs/usr/share/pipewire/pipewire.conf.d/60-tur-echo-cancel.conf`).
+pub const ECHO_SOURCE: &str = "tur-echo-cancel-source";
+
+/// The speaker whose sound that microphone removes.
+pub const ECHO_SINK: &str = "tur-echo-cancel-sink";
+
+/// The language of a locale such as `it_IT.UTF-8`, if P@x speaks it.
+pub fn system_language(locale: &str) -> Option<&'static str> {
+    let tag = locale
+        .split(['_', '.', '@', '-'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    LANGUAGES.iter().copied().find(|language| *language == tag)
+}
+
+/// The language speech is recognised in: the person's choice; with `auto`
+/// (the default), the system's language when P@x speaks it (the owner's
+/// decision of 16 November 2026); otherwise `auto`, detected by the model.
+pub fn effective_language(setting: &str, system: Option<&str>) -> String {
+    match (setting, system) {
+        ("auto", Some(language)) => language.to_owned(),
+        (setting, _) => setting.to_owned(),
+    }
+}
+
 /// Words that stop the running task when they are all a person says.
 pub const STOP_WORDS: &[&str] = &[
     "stop", "cancel", "stop it", "halt", "ferma", "fermati", "basta", "annulla", "stopp",
@@ -1213,26 +1240,27 @@ pub fn other_sound_playing(pw_dump: &str, own_pid: u32) -> bool {
 /// The application name P@x's own audio streams carry.
 pub const OWN_APPLICATION_NAME: &str = "P@x";
 
-/// Whether the default capture source is PipeWire's echo canceller, from
-/// what `pw-dump` printed: a node of class `Audio/Source` whose name or
-/// factory says echo-cancel.
+/// Whether TUR's echo canceller is there, from what `pw-dump` printed: the
+/// microphone [`ECHO_SOURCE`] (`Audio/Source`) and the speaker
+/// [`ECHO_SINK`] (`Audio/Sink`). Only then does P@x capture from and play
+/// into them, and only then may the person's voice interrupt P@x.
 pub fn echo_cancelled_source(pw_dump: &str) -> bool {
     let Ok(Value::Array(objects)) = serde_json::from_str::<Value>(pw_dump) else {
         return false;
     };
-    objects.iter().any(|object| {
-        let props = object.get("info").and_then(|info| info.get("props"));
-        let text = |key: &str| {
-            props
-                .and_then(|props| props.get(key))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-        };
-        text("media.class") == "Audio/Source"
-            && (text("node.name").contains("echo-cancel")
-                || text("factory.name").contains("echo-cancel")
-                || text("library.name").contains("echo-cancel"))
-    })
+    let node = |name: &str, class: &str| {
+        objects.iter().any(|object| {
+            let props = object.get("info").and_then(|info| info.get("props"));
+            let text = |key: &str| {
+                props
+                    .and_then(|props| props.get(key))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            };
+            text("node.name") == name && text("media.class") == class
+        })
+    };
+    node(ECHO_SOURCE, "Audio/Source") && node(ECHO_SINK, "Audio/Sink")
 }
 
 // ----------------------------------------------------------------- audio
@@ -1768,9 +1796,15 @@ mod tests {
         // What cannot be read counts as sound: the stricter reading.
         assert!(other_sound_playing("not json", 77));
         let echo = r#"[{"type": "PipeWire:Interface:Node", "info": {"props": {
-            "media.class": "Audio/Source", "node.name": "echo-cancel-source"}}}]"#;
+            "media.class": "Audio/Source", "node.name": "tur-echo-cancel-source"}}},
+            {"type": "PipeWire:Interface:Node", "info": {"props": {
+            "media.class": "Audio/Sink", "node.name": "tur-echo-cancel-sink"}}}]"#;
         assert!(echo_cancelled_source(echo));
         assert!(!echo_cancelled_source(only_ours));
+        // Someone else's canceller is not ours to route through.
+        let other = r#"[{"type": "PipeWire:Interface:Node", "info": {"props": {
+            "media.class": "Audio/Source", "node.name": "echo-cancel-source"}}}]"#;
+        assert!(!echo_cancelled_source(other));
     }
 
     #[test]
@@ -1915,6 +1949,19 @@ mod tests {
         assert_eq!(rest, "Version 1.5 is out");
         let (done, _) = complete_sentences("Ho aperto la fattura! Il totale è 412 euro? ");
         assert_eq!(done.len(), 2);
+    }
+
+    #[test]
+    fn the_language_follows_the_system_when_p_a_x_speaks_it() {
+        assert_eq!(system_language("it_IT.UTF-8"), Some("it"));
+        assert_eq!(system_language("en_GB.UTF-8"), Some("en"));
+        assert_eq!(system_language("de_DE@euro"), Some("de"));
+        assert_eq!(system_language("C.UTF-8"), None);
+        assert_eq!(system_language("ja_JP.UTF-8"), None);
+        assert_eq!(system_language(""), None);
+        assert_eq!(effective_language("auto", Some("it")), "it");
+        assert_eq!(effective_language("auto", None), "auto");
+        assert_eq!(effective_language("en", Some("it")), "en");
     }
 
     #[test]
