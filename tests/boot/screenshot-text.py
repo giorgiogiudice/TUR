@@ -10,6 +10,14 @@ OUT_DIR/screenshot-*.png and OUT_DIR/splash/frame-*.png with Tesseract,
 writes what it read to OUT_DIR/screenshot-text.json and fails if any of it
 contains "fedora" in any case. Text recognition does not see a logo drawn
 without letters: a person still looks at the pictures (TUR-008).
+
+    tests/boot/screenshot-text.py --programs OUT_DIR
+
+reads the pictures of TUR's desktop programs (OUT_DIR/desktop-programs/*.png,
+issue #59) and writes what it read to OUT_DIR/desktop-programs/text.json. It
+fails nothing: the application centre names Fedora where an application
+comes from Fedora's packages, truthfully (the catalogue says so). What was
+read is for the person who looks at the pictures.
 """
 
 from __future__ import annotations
@@ -37,7 +45,28 @@ ALLOWED = [
 ]
 
 
+def programs(out: pathlib.Path) -> int:
+    pictures = sorted((out / "desktop-programs").glob("*.png"))
+    read = {}
+    for picture in pictures:
+        result = subprocess.run(["tesseract", str(picture), "-", "--psm", "11"], capture_output=True, text=True)
+        text = " ".join(result.stdout.split())
+        read[picture.name] = text
+        names = sorted(set(re.findall(r"\S*fedora\S*", text, re.I)))
+        print(f"{picture.name}: {text[:600]}")
+        if names:
+            print(f"         names Fedora (informational): {names}")
+    if pictures:
+        (out / "desktop-programs" / "text.json").write_text(json.dumps(read, indent=2) + "\n")
+    print(f"\n{len(pictures)} pictures of TUR's desktop programs read.")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--programs":
+        if not shutil.which("tesseract"):
+            sys.exit("tesseract is not installed")
+        return programs(pathlib.Path(sys.argv[2]))
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     out = pathlib.Path(sys.argv[1])

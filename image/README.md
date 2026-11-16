@@ -11,6 +11,7 @@ The TUR operating system is one bootc container image, defined by
 | `programs.tsv` | The TUR programs compiled into the image: component, program, where it is installed |
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
 | `files.tsv` | Data and units of the components that go with the programs: P@x's model list and units, the local AI model catalogue |
+| `desktop/` | The desktop programs, built from `desktop/` in a stage of its own against the image's own Qt (`build.sh`), and the two font packages the image adds (`fonts.lock`, `fonts.sh`) (section "The desktop programs") |
 | `engine/` | The local AI engine, llama.cpp, built from its source in a stage of its own: the pinned version (`llama-cpp.lock`) and the build script (section "The local AI engine") |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
 | `branding/` | What replaces Fedora's marks: the script the build runs, the pinned replacement packages, Firefox's policy (section "Fedora's marks") |
@@ -64,8 +65,8 @@ every user, runs `tur-pax schedule wake` after sign-in, which ends at once
 while P@x is switched off ([pax-service.md](../docs/architecture/pax-service.md),
 section 6). P@x's session service is started by the session bus only when a
 program calls `org.tur.Agent1`. The desktop programs (`tur-centre`,
-`tur-settings`, P@x's window) are not in the image yet (issue #59;
-[TUR-006](../docs/reports/TUR-006.md) says what stood in the way).
+`tur-settings`, P@x's window and overlay) are built in a stage of their own:
+section "The desktop programs".
 
 What goes with the programs:
 
@@ -148,7 +149,69 @@ boot test read `programs.tsv` and expect what it lists.
 What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
-No package is added. The smoke test checks each.
+No package is added for them. The smoke test checks each.
+
+## The desktop programs
+
+TUR's desktop programs (`desktop/`, C++ and QML on Qt 6;
+[desktop-experience.md](../docs/architecture/desktop-experience.md), sections
+14 and 15) are compiled in the image build, in a stage of their own
+(`FROM … AS desktop`), by [`desktop/build.sh`](desktop/build.sh), and
+installed by the install rules of `desktop/CMakeLists.txt` (the component
+`image`).
+
+| In the image | What |
+|---|---|
+| `/usr/bin/tur-centre` | The application centre. Launcher entry `org.tur.Centre.desktop` (and the link scheme `tur-centre:`) |
+| `/usr/bin/tur-settings` | TUR's settings. Launcher entry `org.tur.Settings.desktop` (link scheme `tur-settings:`), bus activation `org.tur.Settings1`, and the entry "TUR" in KDE System Settings' side list (`/usr/share/plasma/systemsettings/externalmodules/`, configuration only) |
+| `/usr/bin/tur-pax-ui` | P@x's window. Launcher entry `org.tur.PaxUi.desktop` with P@x's keys, bus activation `org.tur.PaxUi1`, the icon `org.tur.Pax` in the hicolor theme (a first draft: the kit's flame in gold on the dark tile of TUR's icon) |
+| `/usr/bin/tur-pax-overlay` | P@x's indicator, pointer and highlights. No launcher entry: the session bus starts it when something calls `org.tur.PaxOverlay1` |
+| `/usr/lib64/tur/libtur*.so` | The libraries of the programs' QML modules (`Tur.Kit`, `Tur.Kit.Pax`, `Tur.Centre`, `Tur.Settings`, `Tur.PaxUi`, `Tur.PaxOverlay`), with the QML inside. The programs find them through their run path; no QML import path is set and nothing is installed into Qt's own QML directory |
+| `/usr/share/dbus-1/interfaces/org.tur.*.xml` | The programs' D-Bus interfaces, as described |
+| `/usr/lib/tur/desktop-programs.tsv` | What was installed: program, path, version |
+| `/usr/lib/tur/desktop-built-against.tsv` | The package build of every library the programs link, as it was in the build stage. The smoke test holds the image's Qt and KDE packages to it |
+| `rsms-inter-fonts`, `jetbrains-mono-fonts` | Inter and JetBrains Mono (OFL-1.1), Fedora's packages: the two faces the design names (5.3) that the base does not carry. Inter is the face of TUR's programs outside the session's theme (the overlay); JetBrains Mono is for commands and codes in every TUR program. The desktop's own font is not changed |
+
+How the stage works:
+
+- **"The same Qt as the image."** The stage starts from the pinned base and
+  installs the `-devel` packages of `qt6-qtbase`, `qt6-qtdeclarative`,
+  `qt6-qtwayland`, `layer-shell-qt` and `kwayland` **by the exact version and
+  release the base has**. Fedora's repositories hold only the newest build of
+  a package, so when Fedora has moved past the pinned base that request
+  cannot be met, and the stage stops and says so: refresh the base pin. After
+  the installation it stops as well if any Qt or KDE package of the base was
+  replaced by another build. After the build it writes down the package
+  build of every library the programs link, and the smoke test compares that
+  list with the image. Nothing is built against a Qt the image does not have.
+- **One step has network access** (`build.sh fetch`): the compiler, CMake,
+  Ninja and the `-devel` packages, and the two font packages, each checked
+  against the SHA-256 in [`desktop/fonts.lock`](desktop/fonts.lock) (Fedora's
+  release tree, which does not change). **The compile step has no network.**
+  The compiler and the `-devel` packages stay in the stage.
+- **What is built:** the four programs and the modules they need, in the
+  Release configuration, stripped; not the tests, the kit's gallery, the
+  toolchain probe or the installer's wizard. Build paths are mapped out of the
+  files, and the time Qt's resource compiler records for the QML it packs is
+  the commit's (`TUR_SOURCE_DATE_EPOCH`, from `scripts/build-image.sh`), so
+  that two builds agree.
+- **Checks in the stage:** every program starts from where it was installed
+  and loads its window with no QML warning, offscreen, with no import path
+  set; every library is found; the licence boundary check of the desktop
+  workflow (`desktop/ci/boundary.py --linked`) passes on what is installed.
+  The final stage runs each program's `--version`; the smoke test loads each
+  window on what the image holds (the installed catalogue, this system's
+  facts); the boot test starts each program in a signed-in Plasma session
+  and takes a picture of it (`tests/boot/splash.py`).
+- **The fonts** are installed in the final stage with `rpm`
+  ([`desktop/fonts.sh`](desktop/fonts.sh)), so that the package database, the
+  SBOM and `/usr/share/licenses` know them, with the build ID's date as the
+  time `rpm` records and without fontconfig's trigger, which would write a
+  font cache holding the time of the build.
+
+To add a desktop program: its install rules in its `CMakeLists.txt`
+(`tur_install_program`, `tur_install_modules`, `tur_install_data`), its name
+in `programs` of `desktop/build.sh`, and its checks in the smoke test.
 
 ## The local AI engine
 

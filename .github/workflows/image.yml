@@ -23,6 +23,8 @@ on:
       - "services/tur-storage/**"
       - "services/tur-update/**"
       - "installer/tur-installer-core/**"
+      # The desktop programs, built in the image build (image/desktop/).
+      - "desktop/**"
       - "catalogue/**"
       - "crates/**"
       - "LICENSE.md"
@@ -55,6 +57,8 @@ on:
       - "services/tur-storage/**"
       - "services/tur-update/**"
       - "installer/tur-installer-core/**"
+      # The desktop programs, built in the image build (image/desktop/).
+      - "desktop/**"
       - "catalogue/**"
       - "crates/**"
       - "LICENSE.md"
@@ -95,7 +99,7 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/desktop/*.sh
           python3 -m py_compile scripts/*.py tests/image/*.py
 
       - name: Runner environment
@@ -139,7 +143,7 @@ jobs:
           echo "first:  $a"; echo "second: $b"
           if [ "$a" != "$b" ]; then
             # Say which of the files TUR adds differ between the two builds.
-            list='cd / && find usr/bin/tur-* usr/libexec/tur usr/lib/tur usr/share/tur usr/share/licenses/tur usr/share/licenses/tur-third-party usr/lib/os-release usr/lib/modules/*/initramfs.img usr/share/plymouth/themes/tur usr/share/wallpapers/Tur usr/share/icons/hicolor/icon-theme.cache usr/lib/sysimage/rpm -type f | LC_ALL=C sort | xargs sha256sum'
+            list='cd / && find usr/bin/tur-* usr/libexec/tur usr/lib/tur usr/lib64/tur usr/share/fonts usr/lib/fontconfig usr/share/applications/org.tur.* usr/share/tur usr/share/licenses/tur usr/share/licenses/tur-third-party usr/lib/os-release usr/lib/modules/*/initramfs.img usr/share/plymouth/themes/tur usr/share/wallpapers/Tur usr/share/icons/hicolor/icon-theme.cache usr/lib/sysimage/rpm -type f | LC_ALL=C sort | xargs sha256sum'
             $PODMAN run --rm --network none "$IMAGE" /bin/bash -c "$list" > "$RUNNER_TEMP/first.sha256"
             $PODMAN run --rm --network none localhost/tur:repro /bin/bash -c "$list" > "$RUNNER_TEMP/second.sha256"
             echo "files TUR adds that differ between the two builds:"

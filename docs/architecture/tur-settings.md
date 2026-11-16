@@ -394,7 +394,9 @@ confirm or replace.
 - **The launcher's search** (`tur-search`, D-13), which is to call
   `org.tur.Settings1.Search`.
 - **P@x's tools.** Section 8.
-- **Install rules**, and so the image. Nothing of this is in the image.
+- (Built since, TUR-011: install rules; `tur-settings`, its launcher entry,
+  its bus activation file and its entry in System Settings are in the
+  image.)
 - **Translations.** Every sentence goes through `qsTr`; registry titles go
   through `qsTranslate` with the context `SettingsRegistry`. No catalogue is
   extracted or loaded (design, L9).

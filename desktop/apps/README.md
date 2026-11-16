@@ -11,10 +11,10 @@ sections 14.1 and 15.1). Each arrives with the task that builds it. So far:
 | `setup/` | `tur-setup`, first-run setup | D-06 |
 | `welcome/` | `tur-welcome` | D-14 |
 | `tur-centre/` | `tur-centre`, the application centre | D-10 (built), D-11, D-12 |
-| `settings/` | `tur-settings` | D-07 |
+| `tur-settings/` | `tur-settings` | D-07 (built) |
 | `diagnostics/` | `tur-diagnostics` | D-08 |
-| `pax-ui/` | `tur-pax-ui` | D-17 |
-| `pax-overlay/` | `tur-pax-overlay` | D-15 |
+| `tur-pax-ui/` | `tur-pax-ui` | D-17 (built) |
+| `tur-pax-overlay/` | `tur-pax-overlay` | D-15 (built) |
 | `pax-approve/` | `tur-pax-approve` | D-18 |
 | `confirm/` | `tur-confirm`, the trusted screen | D-16 |
 
@@ -28,3 +28,9 @@ data/ (desktop file, icons, registry file, tool manifest)
 A program is a `QGuiApplication` with one QML module, built on `Tur.Kit`
 (see [desktop-kit.md](../../docs/architecture/desktop-kit.md)), and is added
 to `desktop/CMakeLists.txt` with `add_subdirectory`.
+
+A program that goes into the image says so in its `CMakeLists.txt`:
+`tur_install_program` for the program, `tur_install_modules` for its QML
+module's library, `tur_install_data` for its launcher entry, bus activation
+file, interface description and icon (`desktop/README.md`, "Into the
+image").

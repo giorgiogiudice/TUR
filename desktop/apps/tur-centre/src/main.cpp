@@ -28,6 +28,8 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("tur-centre"));
     QCoreApplication::setApplicationVersion(QStringLiteral(TUR_VERSION));
+    // The launcher entry the compositor takes the window's name and icon from.
+    QGuiApplication::setDesktopFileName(QStringLiteral("org.tur.Centre"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
