@@ -7,6 +7,8 @@
 
 #include <QGuiApplication>
 #include <QJSValue>
+#include <QMouseEvent>
+#include <QTextStream>
 #include <QQuickWindow>
 #include <QRectF>
 #include <QRegion>
@@ -32,6 +34,7 @@ Surfaces::Surfaces(QObject *root, CompanionService *service, QObject *parent)
     , m_root(root)
     , m_service(service)
     , m_layerShell(QGuiApplication::platformName() == QLatin1String("wayland"))
+    , m_trace(qEnvironmentVariableIsSet("TUR_COMPANION_TRACE"))
 {
     m_strip = qobject_cast<QQuickWindow *>(root->property("strip").value<QObject *>());
     m_probe = qobject_cast<QQuickWindow *>(root->property("probe").value<QObject *>());
@@ -68,6 +71,8 @@ Surfaces::Surfaces(QObject *root, CompanionService *service, QObject *parent)
         layer->setScope(QStringLiteral("tur-pax-companion-probe"));
     }
 
+    if (m_trace && m_strip)
+        m_strip->installEventFilter(this);
     connect(root, SIGNAL(hitRectsChanged()), this, SLOT(applyMask()));
     connect(root, SIGNAL(attendedChanged()), this, SLOT(applyKeyboard()));
     connect(root, SIGNAL(raisedChanged()), this, SLOT(applyLayer()));
@@ -93,6 +98,30 @@ void Surfaces::applyMask()
     if (region.isEmpty())
         region = QRegion(QRect(-2, -2, 1, 1));
     m_strip->setMask(region);
+    if (m_trace) {
+        QTextStream out(stderr);
+        out << "tur-pax-companion: trace: strip " << m_strip->width() << " x " << m_strip->height()
+            << ", input region";
+        for (const QRect &rect : region)
+            out << ' ' << rect.x() << ',' << rect.y() << ' ' << rect.width() << 'x' << rect.height();
+        out << '\n';
+    }
+}
+
+bool Surfaces::eventFilter(QObject *watched, QEvent *event)
+{
+    const QEvent::Type type = event->type();
+    if (type == QEvent::MouseButtonPress || type == QEvent::MouseButtonRelease
+        || type == QEvent::MouseButtonDblClick) {
+        const auto *mouse = static_cast<QMouseEvent *>(event);
+        QTextStream(stderr) << "tur-pax-companion: trace: "
+                            << (type == QEvent::MouseButtonPress     ? "press"
+                                : type == QEvent::MouseButtonRelease ? "release"
+                                                                     : "double click")
+                            << " at " << mouse->position().x() << ',' << mouse->position().y() << " in a strip "
+                            << m_strip->width() << " x " << m_strip->height() << '\n';
+    }
+    return QObject::eventFilter(watched, event);
 }
 
 void Surfaces::applyKeyboard()

@@ -307,6 +307,28 @@ private:
         return picture;
     }
 
+    // Screenshots until the character is in `area` and has stopped moving:
+    // two pictures in a row with the same box round its gold (a change of
+    // state is one short movement, run 43774347681 caught one half-way).
+    QImage captureSettled(const QRectF &area)
+    {
+        QImage picture;
+        QRectF last;
+        QElapsedTimer clock;
+        clock.start();
+        do {
+            picture = capture();
+            if (!picture.isNull() && characterIn(picture, area)) {
+                const QRectF box = goldBox(picture, area);
+                if (box == last)
+                    return picture;
+                last = box;
+            }
+            QTest::qWait(250);
+        } while (clock.elapsed() < 15000);
+        return picture;
+    }
+
     void keep(const QImage &image, const QString &what)
     {
         const QString name =
@@ -457,6 +479,9 @@ private:
                                      : QByteArray("{\"version\": 1}\n"));
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
         environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
+        // The program writes down its input region and the presses it is
+        // given, for the log of this test.
+        environment.insert(QStringLiteral("TUR_COMPANION_TRACE"), QStringLiteral("1"));
         m_companion.setProcessEnvironment(environment);
         m_companion.setProcessChannelMode(QProcess::ForwardedChannels);
         m_companion.start(QStringLiteral(TUR_COMPANION_PROGRAM),
@@ -577,7 +602,7 @@ private Q_SLOTS:
     // In the bar, at its end, in the middle of its thickness.
     void it_sits_in_the_bar()
     {
-        const QImage picture = captureUntil([&](const QImage &image) { return characterIn(image, band()); });
+        const QImage picture = captureSettled(band());
         keep(picture, QStringLiteral("on-the-bar"));
         int count = 0;
         const QRectF box = goldBox(picture, band(), &count);
@@ -714,11 +739,23 @@ private Q_SLOTS:
         QVERIFY2(stateBecomes(QStringLiteral("telling")), qPrintable(state()));
         QCOMPARE(property(windowService, windowPath, QStringLiteral("Mode")).toString(), QString());
         // The next press opens P@x's ask bar.
+        const QImage telling = captureSettled(band());
+        keep(telling, QStringLiteral("telling-before-the-second-press"));
+        report(QStringLiteral("before the second press: state %1, Anchor x %2, gold in the bar at %3")
+                   .arg(state())
+                   .arg(anchor().value(QStringLiteral("x")).toDouble())
+                   .arg(describe(goldBox(telling, band()))));
         click(onTheCharacter);
-        QVERIFY2(QTest::qWaitFor([] {
-                     return property(windowService, windowPath, QStringLiteral("Mode")).toString() == QLatin1String("ask");
-                 }, 20000),
-                 "P@x's window shows its ask bar");
+        const auto askShown = [] {
+            return property(windowService, windowPath, QStringLiteral("Mode")).toString() == QLatin1String("ask");
+        };
+        if (!QTest::qWaitFor(askShown, 5000)) {
+            // What happened, for the report: the state, and a picture.
+            report(QStringLiteral("the second press opened nothing in 5 s: state %1, Mode \"%2\"")
+                       .arg(state(), property(windowService, windowPath, QStringLiteral("Mode")).toString()));
+            keep(capture(), QStringLiteral("after-the-second-press"));
+        }
+        QVERIFY2(QTest::qWaitFor(askShown, 15000), "P@x's window shows its ask bar");
         // The character listens, and what it was saying made room.
         QVERIFY2(stateBecomes(QStringLiteral("listening")), qPrintable(state()));
 
@@ -777,13 +814,18 @@ private Q_SLOTS:
         QTest::qWait(600);
 
         const QRectF wanted(from.x() - 240 - 30, band().y(), 60, band().height());
-        const QImage after = captureUntil([&](const QImage &image) { return characterIn(image, wanted); });
+        const QImage after = captureSettled(wanted);
         keep(after, QStringLiteral("dragged-along-the-bar"));
         const QRectF is = goldBox(after, band());
         report(QStringLiteral("dragged 240 to the left: the character went from %1 to %2").arg(describe(was), describe(is)));
         QVERIFY2(std::abs(is.center().x() - (from.x() - 240)) <= 6, qPrintable(describe(is)));
         QVERIFY2(std::abs(is.center().y() - was.center().y()) <= 2, "it stays in the bar's row");
-        QVERIFY2(std::abs(anchor().value(QStringLiteral("x")).toDouble() - is.center().x()) <= 4, "Anchor follows it");
+        const bool followed = QTest::qWaitFor(
+            [&] { return std::abs(anchor().value(QStringLiteral("x")).toDouble() - is.center().x()) <= 4; }, 5000);
+        report(QStringLiteral("after the drag Anchor says x %1; the gold's middle is at %2")
+                   .arg(anchor().value(QStringLiteral("x")).toDouble())
+                   .arg(is.center().x()));
+        QVERIFY2(followed, "Anchor follows it");
         // A drag is not a press: nothing opened.
         QCOMPARE(property(windowService, windowPath, QStringLiteral("Mode")).toString(), QString());
         QCOMPARE(state(), QStringLiteral("noticing"));

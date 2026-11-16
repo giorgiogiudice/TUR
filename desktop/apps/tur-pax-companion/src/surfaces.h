@@ -37,6 +37,10 @@ public:
 
     bool layerShell() const { return m_layerShell; }
 
+protected:
+    // With TUR_COMPANION_TRACE set: the presses the strip is given.
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private Q_SLOTS:
     void applyMask();
     void applyKeyboard();
@@ -49,4 +53,5 @@ private:
     QPointer<QQuickWindow> m_strip;
     QPointer<QQuickWindow> m_probe;
     bool m_layerShell = false;
+    bool m_trace = false;
 };

@@ -87,7 +87,7 @@ QtObject {
     readonly property string quietTomorrow: qsTr("Until tomorrow")
     readonly property string quietAlways: qsTr("Until I say")
     readonly property string quietOff: qsTr("Speak again")
-    readonly property string quietNow: qsTr("P@x's character is quiet. What it would have said waits as a mark; press the character to hear it.")
+    readonly property string quietNow: qsTr("P@x's character is quiet. What it would have said waits as a mark; press the character to hear it. TUR's own notifications still come.")
     readonly property string quietNote: qsTr("Quiet stops the character from speaking first. P@x's own indicator and TUR's notifications are not changed.")
     readonly property string watching: qsTr("What is P@x watching?")
     readonly property string settings: qsTr("What it may tell me")

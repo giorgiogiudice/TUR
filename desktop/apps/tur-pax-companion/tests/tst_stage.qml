@@ -115,6 +115,9 @@ Item {
         }
 
         function press(stage, name) {
+            // What was just opened is laid out on the next frame: until then
+            // a button of a second row is not where it will be drawn.
+            wait(50)
             const button = find(stage.leafItem, name)
             verify(button !== null, "there is a " + name)
             verify(button.visible, name + " is shown")

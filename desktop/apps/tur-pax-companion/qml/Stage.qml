@@ -257,6 +257,13 @@ Item {
                 else
                     stage.press()
             }
+            // A second press soon after the first is a press too, not a
+            // gesture of its own (the KWin test pressed twice 0.4 s apart
+            // and the second press was lost, run 43774347681).
+            onDoubleClicked: mouse => {
+                if (!pointer.moved && mouse.button === Qt.LeftButton)
+                    stage.press()
+            }
             onPressAndHold: {
                 if (!pointer.moved)
                     stage.toggleMenu()

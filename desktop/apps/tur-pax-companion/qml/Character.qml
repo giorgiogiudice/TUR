@@ -319,6 +319,20 @@ Item {
                 Translate {
                     x: character.sway * character.unit
                     y: character.coreRise * character.unit
+                },
+                // When the inner flame burns low the core shrinks with it and
+                // stays inside it: left as it is, a full core over a low
+                // inner flame read as a smile (the low-fuel picture of run
+                // 43774347681), and the character has no face.
+                Scale {
+                    id: coreFuel
+
+                    readonly property real factor: Math.min(1, (0.45 + 0.55 * character.fuel) / 0.725)
+
+                    origin.x: 16 * character.unit
+                    origin.y: 26.5 * character.unit
+                    xScale: coreFuel.factor
+                    yScale: coreFuel.factor
                 }
             ]
 
