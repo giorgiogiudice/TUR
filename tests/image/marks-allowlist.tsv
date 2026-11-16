@@ -47,6 +47,7 @@ text	/usr/share/sssd/krb5-snippets/enable_sssd_conf_dir	A comment in SSSD's conf
 text	/usr/share/kde-settings/kde-profile/default/xdg/kde-mimeapps.list	A comment in kde-settings
 text	/etc/geoclue/geoclue.conf	A comment in GeoClue's configuration
 text	/etc/firewalld/firewalld-*.conf	firewalld's default zone for Fedora's editions, by name (follow-up: TUR's own zone)
+text	/usr/lib/waydroid/data/scripts/waydroid-net.sh	A comment of Fedora's Waydroid patch over the bridge's firewall zone, which TUR's zone tur-android overrides (ADR-0006)
 text	/usr/lib/firewalld/zones/FedoraWorkstation.xml	firewalld's zone for Fedora Workstation, the default zone of the base (follow-up: TUR's own zone)
 text	/usr/lib/realmd/realmd-distro.conf	realmd's per-distribution settings
 #

@@ -227,7 +227,9 @@ fn status() -> Done {
         .unwrap_or(serde_json::Value::Null);
     let switching_on = host::unit_state("tur-android-enable.service").active == "active";
     let message = match (&version, enabled, switching_on) {
-        (None, _, _) => "Android cannot be used here: Waydroid is not in this system image.".to_owned(),
+        (None, _, _) => {
+            "Android cannot be used here: Waydroid is not in this system image.".to_owned()
+        }
         (Some(_), _, true) => "Android is being switched on.".to_owned(),
         (Some(_), true, false) => format!(
             "Android is switched on: {} process(es) running, {} mount(s), {} network interface(s).",
@@ -250,7 +252,10 @@ fn status() -> Done {
         .with("switching_on", json!(switching_on))
         .with("state", state)
         .with("service", json!(host::unit_state(host::SERVICE)))
-        .with("binderfs_unit", json!(host::unit_state(host::BINDERFS_UNIT)))
+        .with(
+            "binderfs_unit",
+            json!(host::unit_state(host::BINDERFS_UNIT)),
+        )
         .with("processes", json!(processes))
         .with("mounts", json!(mounts))
         .with("interfaces", json!(interfaces))
@@ -274,8 +279,7 @@ fn enable(arguments: &EnableArgs) -> Result<Result<Done, Failure>, u8> {
     };
     let explanation = pins::explain(&pins);
     if !arguments.yes
-        && (arguments.pins.json
-            || !ask(&explanation.paragraphs, "Switch Android on now?"))
+        && (arguments.pins.json || !ask(&explanation.paragraphs, "Switch Android on now?"))
     {
         return Ok(Err(Failure::refused(
             Code::ConsentRequired,
@@ -312,7 +316,8 @@ fn enable(arguments: &EnableArgs) -> Result<Result<Done, Failure>, u8> {
         };
     }
     if arguments.detach {
-        let program = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("/usr/bin/tur-android"));
+        let program =
+            std::env::current_exe().unwrap_or_else(|_| PathBuf::from("/usr/bin/tur-android"));
         let mut command = Process::new("systemd-run");
         command
             .args(["--unit=tur-android-enable", "--collect", "--quiet", "--"])
@@ -350,9 +355,7 @@ fn disable(arguments: &DisableArgs) -> Result<Result<Done, Failure>, u8> {
          unmounts everything of Android. Your Android applications and their data are kept."
             .to_owned(),
     ];
-    if !arguments.yes
-        && (arguments.json || !ask(&paragraphs, "Switch Android off now?"))
-    {
+    if !arguments.yes && (arguments.json || !ask(&paragraphs, "Switch Android off now?")) {
         return Ok(Err(Failure::refused(
             Code::ConsentRequired,
             "Android was not switched off: run `tur-android disable --yes` to confirm.",
@@ -414,13 +417,20 @@ fn run_cli(arguments: Vec<OsString>) -> u8 {
         Command::Install(a) => (
             "install",
             a.pins.json,
-            system::load_pins(&a.pins.pins).and_then(|pins| {
-                user::install(&a.apk, &pins, Duration::from_secs(a.wait))
-            }),
+            system::load_pins(&a.pins.pins)
+                .and_then(|pins| user::install(&a.apk, &pins, Duration::from_secs(a.wait))),
         ),
         Command::List(a) => ("list", a.json, Ok(user::list(a.all))),
-        Command::Launch(a) => ("launch", a.json, user::launch(&a.id, Duration::from_secs(a.wait))),
-        Command::Remove(a) => ("remove", a.json, user::remove(&a.id, Duration::from_secs(a.wait))),
+        Command::Launch(a) => (
+            "launch",
+            a.json,
+            user::launch(&a.id, Duration::from_secs(a.wait)),
+        ),
+        Command::Remove(a) => (
+            "remove",
+            a.json,
+            user::remove(&a.id, Duration::from_secs(a.wait)),
+        ),
         Command::Codes(a) => ("codes", a.json, Ok(codes())),
     };
     let mut stdout = io::stdout().lock();

@@ -135,7 +135,11 @@ pub(crate) fn print(
             ),
         }
     };
-    if written.is_err() { EXIT_FAILED } else { status }
+    if written.is_err() {
+        EXIT_FAILED
+    } else {
+        status
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +159,11 @@ mod tests {
         assert_eq!(value["package"], "x");
         let (mut out, mut err) = (Vec::new(), Vec::new());
         assert_eq!(print("install", &outcome, false, &mut out, &mut err), 3);
-        assert!(String::from_utf8(err).unwrap().starts_with("TUR-ANDROID-ABI-001: "));
+        assert!(
+            String::from_utf8(err)
+                .unwrap()
+                .starts_with("TUR-ANDROID-ABI-001: ")
+        );
     }
 
     #[test]

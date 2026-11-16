@@ -24,33 +24,29 @@ const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-android");
 const INSTALLED: &str = "/usr/bin/tur-android";
 const SERVICE: &str = "org.tur.Android1";
 
-/// The tools, their classes, the subcommand that performs each and the
-/// arguments of a sample call.
-fn cases() -> Vec<(&'static str, ActionClass, &'static str, Value)> {
+/// Every tool the manifest declares, with the class of the design
+/// (android-runtime.md, section 9.3).
+const DECLARED: [(&str, ActionClass); 8] = [
+    ("android_status", ActionClass::Observe),
+    ("android_explain", ActionClass::Observe),
+    ("android_list_apps", ActionClass::Observe),
+    ("android_launch_app", ActionClass::Reversible),
+    ("android_install_app", ActionClass::Consequential),
+    ("android_remove_app", ActionClass::Consequential),
+    ("android_switch_on", ActionClass::SystemCritical),
+    ("android_switch_off", ActionClass::SystemCritical),
+];
+
+/// The tools P@x is offered, the subcommand that performs each and the
+/// arguments of a sample call. P@x offers only tools that observe; the
+/// others are declared, with their classes, and have no adapter until P@x
+/// can perform an action above class 0 through the trusted path
+/// (services/tur-pax/tests/tools.rs holds every component to that).
+fn cases() -> Vec<(&'static str, &'static str, Value)> {
     vec![
-        ("android_status", ActionClass::Observe, "status", json!({})),
-        ("android_explain", ActionClass::Observe, "explain", json!({})),
-        ("android_list_apps", ActionClass::Observe, "list", json!({})),
-        (
-            "android_launch_app",
-            ActionClass::Reversible,
-            "launch",
-            json!({ "id": "org.billthefarmer.editor" }),
-        ),
-        (
-            "android_install_app",
-            ActionClass::Consequential,
-            "install",
-            json!({ "path": "/home/person/Downloads/editor.apk" }),
-        ),
-        (
-            "android_remove_app",
-            ActionClass::Consequential,
-            "remove",
-            json!({ "id": "org.billthefarmer.editor" }),
-        ),
-        ("android_switch_on", ActionClass::SystemCritical, "enable", json!({})),
-        ("android_switch_off", ActionClass::SystemCritical, "disable", json!({})),
+        ("android_status", "status", json!({})),
+        ("android_explain", "explain", json!({})),
+        ("android_list_apps", "list", json!({})),
     ]
 }
 
@@ -76,16 +72,41 @@ fn help(arguments: &[&str]) -> String {
 
 #[test]
 fn the_tools_load_with_the_classes_of_the_design() {
+    let manifest: Value = serde_json::from_str(MANIFEST).expect("the manifest is JSON");
+    let declared: Vec<(String, u64)> = manifest["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .map(|tool| {
+            (
+                tool["name"].as_str().expect("a name").to_owned(),
+                tool["class"].as_u64().expect("a class"),
+            )
+        })
+        .collect();
+    let expected: Vec<(String, u64)> = DECLARED
+        .iter()
+        .map(|(name, class)| ((*name).to_owned(), u64::from(u8::from(*class))))
+        .collect();
+    assert_eq!(declared, expected);
+
     let registry = registry();
     let offered = registry.offered();
     let names: Vec<&str> = offered.iter().map(|tool| tool.name.as_str()).collect();
-    let expected: Vec<&str> = cases().iter().map(|case| case.0).collect();
-    assert_eq!(names, expected);
-    for (tool, (_, class, _, _)) in offered.iter().zip(cases()) {
+    assert_eq!(names, ["android_status", "android_explain", "android_list_apps"]);
+    for tool in &offered {
         assert_eq!(tool.service, SERVICE, "{}", tool.name);
-        assert_eq!(tool.class, class, "{}", tool.name);
+        assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
     }
-    assert!(registry.unavailable().is_empty());
+    let mut unavailable = registry.unavailable();
+    unavailable.sort();
+    let mut above: Vec<String> = DECLARED
+        .iter()
+        .filter(|(_, class)| *class != ActionClass::Observe)
+        .map(|(name, _)| (*name).to_owned())
+        .collect();
+    above.sort();
+    assert_eq!(unavailable, above);
     let file = AdapterFile::from_json(ADAPTERS).expect("a valid adapter file");
     assert_eq!(file.service(), SERVICE);
     for adapter in file.adapters() {
@@ -97,7 +118,7 @@ fn the_tools_load_with_the_classes_of_the_design() {
 fn every_command_line_is_one_the_program_really_has() {
     let registry = registry();
     let program_help = help(&[]);
-    for (tool, _, subcommand, arguments) in cases() {
+    for (tool, subcommand, arguments) in cases() {
         let arguments = arguments.as_object().cloned().expect("an object");
         let proposal = registry
             .propose(tool, arguments.clone())
@@ -147,29 +168,14 @@ fn every_command_line_is_one_the_program_really_has() {
 }
 
 #[test]
-fn switching_on_is_detached_and_consent_comes_from_the_trusted_path() {
-    // The adapter passes --yes: the person's consent is the class 3
-    // confirmation on the trusted path, and pkexec then asks for
-    // administrator authentication. The download outlasts any adapter's time
-    // limit, so it runs in the background.
-    let registry = registry();
-    let line = registry
-        .propose("android_switch_on", serde_json::Map::new())
-        .expect("a proposal")
-        .performer
-        .command_line()
-        .expect("a command line");
-    assert_eq!(line, [INSTALLED, "enable", "--yes", "--detach", "--json"]);
-    // No adapter can fetch from another address than the pinned one.
+fn no_adapter_can_name_another_image_source() {
     assert!(!ADAPTERS.contains("--mirror"));
+    assert!(!ADAPTERS.contains("--pins"));
 }
 
 #[test]
 fn the_tools_that_need_no_android_answer_here() {
-    let pins = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/data/images.json"
-    );
+    let pins = concat!(env!("CARGO_MANIFEST_DIR"), "/data/images.json");
     let output = Command::new(PROGRAM)
         .args(["explain", "--json", "--pins", pins])
         .output()

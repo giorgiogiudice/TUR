@@ -2,8 +2,8 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 <!--
   The Android container's bridge (ADR-0006; android-runtime.md, sections 7.5
-  and 10.2; the owner's decision of 15 November 2026). Fedora's Waydroid
-  package puts waydroid0 in the "trusted" zone, which lets Android reach
+  and 10.2; the owner's decision of 15 November 2026). The distribution's
+  Waydroid package puts waydroid0 in the "trusted" zone, which lets Android reach
   every service of the host. Binding the interface here first means that
   Waydroid's own "firewall-cmd -/-zone=trusted -/-add-interface" fails (the
   interface is already in a zone), and this zone applies instead.

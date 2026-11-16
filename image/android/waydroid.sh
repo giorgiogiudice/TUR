@@ -28,6 +28,7 @@ mapfile -t want < <(grep -v '^#' "${lock}" | grep -v '^[[:space:]]*$' | cut -f1)
 [ "${#want[@]}" -gt 0 ] || die "${lock} names no package"
 
 work="$(mktemp -d)"
+find /var -xdev | LC_ALL=C sort > "${work}/var-before"
 rpm -qa --qf '%{NAME}\n' | LC_ALL=C sort -u > "${work}/before"
 dnf -y --repo=fedora --setopt=install_weak_deps=False install "${want[@]}"
 dnf clean all
@@ -46,7 +47,7 @@ total=0
         line="$(rpm -q --qf '%{NAME}\t%{EVR}.%{ARCH}\t%{SIZE}\t%{LICENSE}\n' "${name}" | head -n1)"
         printf '%s\n' "${line}"
         total=$(( total + $(printf '%s' "${line}" | cut -f3) ))
-    done < <(LC_ALL=C comm -13 "${work}/before" "${work}/after")
+    done < <(LC_ALL=C comm -13 "${work}/before" "${work}/after" | grep -v '^gpg-pubkey$')
     printf '# total\t\t%s\n' "${total}"
 } > /usr/share/tur/android/added-packages.tsv
 cat /usr/share/tur/android/added-packages.tsv
@@ -94,8 +95,18 @@ if grep -rqs 'vnd.android.package-archive' /usr/share/applications/mimeinfo.cach
     die "a launcher entry still claims APK files"
 fi
 
-# Nothing under /var: the package's scriptlet may have started Waydroid's
-# state directory.
+# Nothing under /var that the packages do not own: dnf's log, cache and
+# repository state, and the package's scriptlet's start of Waydroid's state
+# directory, differ from one build to the next (the image workflow builds
+# twice and compares). ldconfig's cache of file times is rebuilt on demand.
 rm -rf /var/lib/waydroid
+find /var -xdev | LC_ALL=C sort > "${work}/var-after"
+LC_ALL=C comm -13 "${work}/var-before" "${work}/var-after" | sort -r | while read -r path; do
+    if ! rpm -qf "${path}" > /dev/null 2>&1; then
+        rm -rf "${path}"
+        say "removed ${path} (left by the installation, owned by no package)"
+    fi
+done
+rm -f /var/cache/ldconfig/aux-cache
 rm -rf "${work}"
 say "done"

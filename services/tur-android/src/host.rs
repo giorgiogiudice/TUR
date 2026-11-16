@@ -180,9 +180,12 @@ pub(crate) fn is_android_process(command: &str, cgroup: &str) -> (bool, bool) {
         .first()
         .is_some_and(|word| word.ends_with("lxc-start") || word.ends_with("lxc-monitord"))
         && command.contains("waydroid");
-    let dnsmasq = words.first().is_some_and(|word| word.ends_with("dnsmasq"))
-        && command.contains("waydroid");
-    (in_container || names_waydroid || lxc || dnsmasq, in_container)
+    let dnsmasq =
+        words.first().is_some_and(|word| word.ends_with("dnsmasq")) && command.contains("waydroid");
+    (
+        in_container || names_waydroid || lxc || dnsmasq,
+        in_container,
+    )
 }
 
 /// Every process of Android: Waydroid's own, LXC's, the container's
@@ -215,12 +218,14 @@ pub(crate) fn android_processes() -> Vec<Process> {
         if !android {
             continue;
         }
-        let uid = fs::read_to_string(dir.join("status")).ok().and_then(|status| {
-            status
-                .lines()
-                .find(|line| line.starts_with("Uid:"))
-                .and_then(|line| line.split_whitespace().nth(1)?.parse().ok())
-        });
+        let uid = fs::read_to_string(dir.join("status"))
+            .ok()
+            .and_then(|status| {
+                status
+                    .lines()
+                    .find(|line| line.starts_with("Uid:"))
+                    .and_then(|line| line.split_whitespace().nth(1)?.parse().ok())
+            });
         let mut short: String = command.chars().take(160).collect();
         if short.is_empty() {
             short = format!("[pid {pid}]");
@@ -363,7 +368,10 @@ mod tests {
 
     #[test]
     fn processes_of_android_are_recognised() {
-        let session = is_android_process("/usr/bin/python3 /usr/bin/waydroid session start", "0::/user.slice");
+        let session = is_android_process(
+            "/usr/bin/python3 /usr/bin/waydroid session start",
+            "0::/user.slice",
+        );
         assert_eq!(session, (true, false));
         let init = is_android_process("/init second_stage", "0::/lxc.payload.waydroid2/init.scope");
         assert_eq!(init, (true, true));

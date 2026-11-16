@@ -236,10 +236,8 @@ pub(crate) fn parse(data: &[u8]) -> Result<ManifestFacts, String> {
         match kind {
             RES_STRING_POOL_TYPE => strings = Strings::parse(chunk, header_size)?,
             RES_XML_RESOURCE_MAP_TYPE => {
-                ids = chunk[header_size..]
-                    .chunks_exact(4)
-                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                    .collect();
+                let (words, _) = chunk[header_size..].as_chunks::<4>();
+                ids = words.iter().map(|word| u32::from_le_bytes(*word)).collect();
             }
             RES_XML_START_ELEMENT_TYPE => {
                 depth += 1;
@@ -400,9 +398,11 @@ pub(crate) mod build {
                                 (index, super::TYPE_STRING, index)
                             }
                             Value::Int(number) => (u32::MAX, super::TYPE_INT_DEC, *number),
-                            Value::Bool(flag) => {
-                                (u32::MAX, super::TYPE_INT_BOOLEAN, if *flag { u32::MAX } else { 0 })
-                            }
+                            Value::Bool(flag) => (
+                                u32::MAX,
+                                super::TYPE_INT_BOOLEAN,
+                                if *flag { u32::MAX } else { 0 },
+                            ),
                         };
                         body.extend_from_slice(&raw.to_le_bytes());
                         body.extend_from_slice(&8u16.to_le_bytes());
@@ -465,7 +465,10 @@ pub(crate) mod build {
                 ),
                 (
                     Some(10),
-                    vec![(android, 2, Value::Int(min_sdk)), (android, 3, Value::Int(35))],
+                    vec![
+                        (android, 2, Value::Int(min_sdk)),
+                        (android, 3, Value::Int(35)),
+                    ],
                 ),
                 (None, vec![]),
                 (
@@ -534,6 +537,9 @@ mod tests {
             &[(Some(0), vec![]), (None, vec![])],
             false,
         );
-        assert_eq!(parse(&document).unwrap_err(), "the manifest names no package");
+        assert_eq!(
+            parse(&document).unwrap_err(),
+            "the manifest names no package"
+        );
     }
 }

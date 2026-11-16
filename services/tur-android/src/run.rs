@@ -164,7 +164,11 @@ mod tests {
 
     #[test]
     fn a_program_that_succeeds() {
-        let output = run("sh", &["-c", "echo hello; echo there >&2"], Duration::from_secs(10));
+        let output = run(
+            "sh",
+            &["-c", "echo hello; echo there >&2"],
+            Duration::from_secs(10),
+        );
         assert!(output.ok(), "{output:?}");
         assert_eq!(output.text(), "hello\n");
         assert_eq!(output.stderr, "there\n");
@@ -172,7 +176,11 @@ mod tests {
 
     #[test]
     fn a_program_that_fails_is_described() {
-        let output = run("sh", &["-c", "echo why >&2; exit 3"], Duration::from_secs(10));
+        let output = run(
+            "sh",
+            &["-c", "echo why >&2; exit 3"],
+            Duration::from_secs(10),
+        );
         assert!(!output.ok());
         assert_eq!(output.status, Some(3));
         assert_eq!(output.account(), "exited with status 3: why");
@@ -199,7 +207,11 @@ mod tests {
     fn a_grandchild_holding_the_output_does_not_block() {
         // The shell leaves a sleeping child that inherited its output.
         let started = Instant::now();
-        let output = run("sh", &["-c", "sleep 20 & echo done"], Duration::from_secs(10));
+        let output = run(
+            "sh",
+            &["-c", "sleep 20 & echo done"],
+            Duration::from_secs(10),
+        );
         assert!(output.ok());
         assert!(started.elapsed() < Duration::from_secs(10));
         assert_eq!(output.text(), "done\n");

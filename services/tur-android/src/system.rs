@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 use crate::codes::Code;
 use crate::host::{
     self, BINDERFS, BINDERFS_UNIT, BRIDGE, ENABLED_FLAG, IMAGES_ROOT, PREINSTALLED, SERVICE,
-    STATE_FILE, TUR_STATE, WAYDROID, WAYDROID_CFG,
+    STATE_FILE, TUR_STATE, WAYDROID, WAYDROID_CFG, WAYDROID_STATE,
 };
 use crate::outcome::{Done, Failure};
 use crate::pins::{self, ImagePin, Pins};
@@ -90,6 +90,21 @@ fn journal(unit: &str) -> String {
         Duration::from_secs(20),
     )
     .text()
+}
+
+/// Gives Waydroid's state directory the labels of Fedora's policy for it
+/// (`waydroid_data_t`). The policy labels a directory Waydroid itself, or a
+/// person's own shell (`unconfined_t`), creates there; one created by
+/// another process, such as a service, gets `var_lib_t`, and Waydroid's
+/// daemon may then not write its log (measured: android-1, run 43748613587).
+fn relabel() {
+    if Path::new("/usr/sbin/restorecon").exists() {
+        let _ = run::run(
+            "/usr/sbin/restorecon",
+            &["-R", WAYDROID_STATE],
+            Duration::from_secs(300),
+        );
+    }
 }
 
 /// Loads the pins, as a failure with its code if they cannot be read.
@@ -198,7 +213,14 @@ fn fetch_image(dir: &Path, pin: &ImagePin, mirror: Option<&str>) -> Result<(u64,
     let image_part_text = image_part.to_string_lossy().into_owned();
     let unpack = run::run(
         "python3",
-        &["-I", "-c", UNPACK, &archive_text, &pin.member, &image_part_text],
+        &[
+            "-I",
+            "-c",
+            UNPACK,
+            &archive_text,
+            &pin.member,
+            &image_part_text,
+        ],
         Duration::from_secs(60 * 60),
     );
     let unpacked = fs::metadata(&image_part).map(|m| m.len()).unwrap_or(0);
@@ -332,13 +354,7 @@ pub(crate) fn enable(options: &EnableOptions) -> Result<Done, Failure> {
         digests.insert(pin.member.clone(), json!(digest));
     }
     let fetch_seconds = seconds(fetch_started.elapsed());
-    if Path::new("/usr/sbin/restorecon").exists() {
-        let _ = run::run(
-            "/usr/sbin/restorecon",
-            &["-R", IMAGES_ROOT],
-            Duration::from_secs(300),
-        );
-    }
+    relabel();
     link_images(&set)?;
 
     // Let the service start: its drop-in checks for this flag.
@@ -401,13 +417,17 @@ pub(crate) fn enable(options: &EnableOptions) -> Result<Done, Failure> {
         .map_err(|error| io_step("Waydroid's configuration cannot be read", &error))?;
     fs::write(WAYDROID_CFG, with_properties(&cfg, &set_properties, &unset))
         .map_err(|error| io_step("Waydroid's configuration cannot be written", &error))?;
+    relabel();
     let upgrade = run::run(
         WAYDROID,
         &["upgrade", "--offline"],
         Duration::from_secs(300),
     );
     if !upgrade.ok() {
-        return Err(step(format!("waydroid upgrade --offline {}", upgrade.account())));
+        return Err(step(format!(
+            "waydroid upgrade --offline {}",
+            upgrade.account()
+        )));
     }
     let restart = systemctl(&["restart", SERVICE]);
     if !restart.ok() {
@@ -502,9 +522,7 @@ fn binder_links() -> Vec<PathBuf> {
             entries
                 .filter_map(Result::ok)
                 .map(|entry| entry.path())
-                .filter(|path| {
-                    fs::read_link(path).is_ok_and(|target| target.starts_with(BINDERFS))
-                })
+                .filter(|path| fs::read_link(path).is_ok_and(|target| target.starts_with(BINDERFS)))
                 .collect()
         })
         .unwrap_or_default();
@@ -556,7 +574,10 @@ pub(crate) fn disable(remove_images: bool) -> Result<Done, Failure> {
         signal(*pid, "TERM");
     }
     if !sessions.is_empty() {
-        steps.push(format!("{} Android session(s) asked to stop", sessions.len()));
+        steps.push(format!(
+            "{} Android session(s) asked to stop",
+            sessions.len()
+        ));
         let stopped = wait_for(Duration::from_secs(30), || {
             host::android_processes()
                 .iter()
@@ -575,7 +596,11 @@ pub(crate) fn disable(remove_images: bool) -> Result<Done, Failure> {
         let stop = run::run(WAYDROID, &["container", "stop"], Duration::from_secs(90));
         steps.push(format!(
             "waydroid container stop: {}",
-            if stop.ok() { "done".to_owned() } else { stop.account() }
+            if stop.ok() {
+                "done".to_owned()
+            } else {
+                stop.account()
+            }
         ));
     }
     let stop = systemctl(&["stop", SERVICE]);
@@ -610,7 +635,11 @@ pub(crate) fn disable(remove_images: bool) -> Result<Done, Failure> {
         steps.push(format!(
             "unmounted {}: {}",
             mount.target,
-            if unmount.ok() { "done".to_owned() } else { unmount.account() }
+            if unmount.ok() {
+                "done".to_owned()
+            } else {
+                unmount.account()
+            }
         ));
     }
 
@@ -619,7 +648,11 @@ pub(crate) fn disable(remove_images: bool) -> Result<Done, Failure> {
         let delete = run::run("ip", &["link", "delete", BRIDGE], Duration::from_secs(30));
         steps.push(format!(
             "removed the {BRIDGE} bridge: {}",
-            if delete.ok() { "done".to_owned() } else { delete.account() }
+            if delete.ok() {
+                "done".to_owned()
+            } else {
+                delete.account()
+            }
         ));
     }
 
@@ -636,7 +669,10 @@ pub(crate) fn disable(remove_images: bool) -> Result<Done, Failure> {
         {
             return Err(io_step("the Android images cannot be removed", &error));
         }
-        steps.push(format!("the Android images were removed ({})", pins::human(freed)));
+        steps.push(format!(
+            "the Android images were removed ({})",
+            pins::human(freed)
+        ));
     }
 
     let facts = leftovers();
@@ -705,7 +741,8 @@ mod tests {
 
     #[test]
     fn properties_are_set_in_their_section() {
-        let cfg = "[waydroid]\narch = x86_64\n\n[properties]\nro.hardware.egl=swiftshader\nother = 1\n";
+        let cfg =
+            "[waydroid]\narch = x86_64\n\n[properties]\nro.hardware.egl=swiftshader\nother = 1\n";
         let out = with_properties(cfg, &[MULTI_WINDOW], &["ro.hardware.egl"]);
         assert_eq!(
             out,

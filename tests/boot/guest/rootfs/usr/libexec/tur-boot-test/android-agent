@@ -258,8 +258,8 @@ sleep 5
 # What is left, looked at without tur-android.
 pgrep -a -f 'waydroid|lxc-start|lxc-monitord' > "${out}/left-processes.txt" 2>&1
 in_container=0
-for p in $(ls /proc | grep -E '^[0-9]+$'); do
-    if grep -q 'lxc.payload.waydroid' "/proc/${p}/cgroup" 2> /dev/null; then in_container=$((in_container + 1)); fi
+for cgroup in /proc/[0-9]*/cgroup; do
+    if grep -q 'lxc.payload.waydroid' "${cgroup}" 2> /dev/null; then in_container=$((in_container + 1)); fi
 done
 put left_container_processes "${in_container}"
 put left_processes "$(grep -c . "${out}/left-processes.txt")"

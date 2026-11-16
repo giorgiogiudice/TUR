@@ -174,7 +174,10 @@ fn write_record(record: &BTreeMap<String, Installed>) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(path, serde_json::to_string_pretty(record).unwrap_or_default());
+    let _ = fs::write(
+        path,
+        serde_json::to_string_pretty(record).unwrap_or_default(),
+    );
 }
 
 /// The person's session, as far as Android needs it.
@@ -235,7 +238,9 @@ fn session() -> Result<Session, Failure> {
             format!("The Wayland display {wayland} does not exist."),
         ));
     }
-    let pulse = env::var("PULSE_RUNTIME_PATH").ok().filter(|v| !v.is_empty());
+    let pulse = env::var("PULSE_RUNTIME_PATH")
+        .ok()
+        .filter(|v| !v.is_empty());
     let pulse_dir = pulse
         .as_ref()
         .map_or_else(|| runtime_dir.join("pulse"), PathBuf::from);
@@ -283,6 +288,25 @@ fn user_journal(unit: &str) -> String {
     .text()
 }
 
+/// One desktop window per Android application. `tur-android enable` sets
+/// the property in Waydroid's base properties; it is set again here in the
+/// running system, the way it was measured to work (exp-android-1,
+/// section 6.4), in case the base value does not reach Android's settings.
+fn multi_window() {
+    let current = run::run(
+        WAYDROID,
+        &["prop", "get", "persist.waydroid.multi_windows"],
+        Duration::from_secs(30),
+    );
+    if current.text().trim() != "true" {
+        let _ = run::run(
+            WAYDROID,
+            &["prop", "set", "persist.waydroid.multi_windows", "true"],
+            Duration::from_secs(30),
+        );
+    }
+}
+
 /// Makes sure Android is running in the person's session and ready, and
 /// returns its applications and, if it had to be started, how long that
 /// took.
@@ -316,17 +340,20 @@ fn ensure_running(limit: Duration) -> Result<(Vec<App>, Option<f64>), Failure> {
     if !start.ok() && !start.stderr.contains("already") {
         return Err(Failure::failed(
             Code::ContainerFailed,
-            format!("The Android session could not be started: {}", start.account()),
+            format!(
+                "The Android session could not be started: {}",
+                start.account()
+            ),
         ));
     }
     loop {
         thread::sleep(Duration::from_secs(3));
         if let Some(apps) = apps_now() {
+            multi_window();
             return Ok((apps, Some(seconds(started.elapsed()))));
         }
         let state = user_unit_state(SESSION_UNIT);
-        if started.elapsed() > Duration::from_secs(15)
-            && (state == "failed" || state == "inactive")
+        if started.elapsed() > Duration::from_secs(15) && (state == "failed" || state == "inactive")
         {
             return Err(Failure::failed(
                 Code::ContainerFailed,
@@ -366,7 +393,8 @@ fn poll<T>(limit: Duration, mut check: impl FnMut() -> Option<T>) -> Option<T> {
 /// Installs the package at `path`.
 pub(crate) fn install(path: &Path, pins: &Pins, limit: Duration) -> Result<Done, Failure> {
     let package = apk::inspect(path, pins.api_level).map_err(|refusal| {
-        Failure::refused(refusal.code, refusal.message).with("file", json!(path.display().to_string()))
+        Failure::refused(refusal.code, refusal.message)
+            .with("file", json!(path.display().to_string()))
     })?;
     require_enabled()?;
     let id = package.manifest.package.clone();
@@ -374,7 +402,11 @@ pub(crate) fn install(path: &Path, pins: &Pins, limit: Duration) -> Result<Done,
     let (_, boot) = ensure_running(limit).map_err(|f| f.with("package", facts.clone()))?;
     let started = Instant::now();
     let file = path.to_string_lossy().into_owned();
-    let install = run::run(WAYDROID, &["app", "install", &file], Duration::from_secs(300));
+    let install = run::run(
+        WAYDROID,
+        &["app", "install", &file],
+        Duration::from_secs(300),
+    );
     let listed = poll(Duration::from_secs(90), || {
         apps_now().and_then(|apps| apps.into_iter().find(|app| app.id == id))
     });
@@ -469,9 +501,19 @@ pub(crate) fn list(all: bool) -> Done {
     } else {
         let names: Vec<String> = apps
             .iter()
-            .map(|app| format!("{} ({})", app["name"].as_str().unwrap_or_default(), app["id"].as_str().unwrap_or_default()))
+            .map(|app| {
+                format!(
+                    "{} ({})",
+                    app["name"].as_str().unwrap_or_default(),
+                    app["id"].as_str().unwrap_or_default()
+                )
+            })
             .collect();
-        format!("{} Android application(s): {}", apps.len(), names.join(", "))
+        format!(
+            "{} Android application(s): {}",
+            apps.len(),
+            names.join(", ")
+        )
     };
     Done::new(message)
         .with("enabled", json!(on))
@@ -497,7 +539,10 @@ pub(crate) fn launch(id: &str, limit: Duration) -> Result<Done, Failure> {
     if !launch.ok() || launch.stderr.contains("Failed") {
         return Err(Failure::failed(
             Code::LaunchFailed,
-            format!("Android did not start {id}: waydroid app launch {}", launch.account()),
+            format!(
+                "Android did not start {id}: waydroid app launch {}",
+                launch.account()
+            ),
         ));
     }
     let mut done = Done::new(format!("{} ({id}) was started.", app.name))
@@ -519,7 +564,10 @@ pub(crate) fn remove(id: &str, limit: Duration) -> Result<Done, Failure> {
     if gone.is_none() {
         return Err(Failure::failed(
             Code::RemoveFailed,
-            format!("Android did not remove {id}: waydroid app remove {}", remove.account()),
+            format!(
+                "Android did not remove {id}: waydroid app remove {}",
+                remove.account()
+            ),
         ));
     }
     let mut record = read_record();
@@ -529,9 +577,11 @@ pub(crate) fn remove(id: &str, limit: Duration) -> Result<Done, Failure> {
         launcher_entry(id).is_none().then_some(())
     })
     .is_some();
-    Ok(Done::new(format!("{} ({id}) and its data were removed.", app.name))
-        .with("id", json!(id))
-        .with("launcher_entry_removed", json!(entry_gone)))
+    Ok(
+        Done::new(format!("{} ({id}) and its data were removed.", app.name))
+            .with("id", json!(id))
+            .with("launcher_entry_removed", json!(entry_gone)),
+    )
 }
 
 /// The person's Android session, for `status`.
@@ -575,7 +625,11 @@ mod tests {
         assert_eq!(entry.name, "Editor");
         assert_eq!(entry.icon, None, "an icon that does not exist is not named");
         assert!(!entry.hidden);
-        let hidden = parse_entry("com.android.contacts", Path::new("/y"), "[Desktop Entry]\nName=Contacts\nNoDisplay=true\n");
+        let hidden = parse_entry(
+            "com.android.contacts",
+            Path::new("/y"),
+            "[Desktop Entry]\nName=Contacts\nNoDisplay=true\n",
+        );
         assert!(hidden.hidden);
     }
 }

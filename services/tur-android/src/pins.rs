@@ -96,7 +96,10 @@ impl Pins {
                     .bytes()
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             {
-                return Err(format!("{}: sha256 is not a SHA-256 in hexadecimal", image.name));
+                return Err(format!(
+                    "{}: sha256 is not a SHA-256 in hexadecimal",
+                    image.name
+                ));
             }
             if !image.url.starts_with("https://") {
                 return Err(format!("{}: the address is not https", image.name));
@@ -226,10 +229,7 @@ pub(crate) mod tests {
 
     /// The pins the image ships, read from the repository.
     pub(crate) fn shipped() -> Pins {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/data/images.json"
-        );
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/data/images.json");
         Pins::load(Path::new(path)).unwrap()
     }
 

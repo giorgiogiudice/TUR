@@ -256,8 +256,10 @@ mod tests {
     }
 
     fn apk(manifest: &[u8], extra: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut members: Vec<(&str, &[u8])> =
-            vec![("AndroidManifest.xml", manifest), ("classes.dex", &b"dex\n035\0"[..])];
+        let mut members: Vec<(&str, &[u8])> = vec![
+            ("AndroidManifest.xml", manifest),
+            ("classes.dex", &b"dex\n035\0"[..]),
+        ];
         members.extend_from_slice(extra);
         zipfile::archive(&members)
     }
@@ -312,7 +314,10 @@ mod tests {
         let refusal = inspect(&write("app.aab", &bundle), 33).unwrap_err();
         assert_eq!(refusal.code, Code::PkgBundle);
 
-        let set = zipfile::archive(&[("base.apk", &b"x"[..]), ("split_config.x86_64.apk", &b"y"[..])]);
+        let set = zipfile::archive(&[
+            ("base.apk", &b"x"[..]),
+            ("split_config.x86_64.apk", &b"y"[..]),
+        ]);
         let refusal = inspect(&write("app.apks", &set), 33).unwrap_err();
         assert_eq!(refusal.code, Code::PkgSplitSet);
 
