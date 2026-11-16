@@ -17,7 +17,10 @@
   <interface name="org.tur.PaxUi1">
     <!-- Shows "ask" (the ask bar), "panel" (the conversation), "activity"
          (P@x's record of what it did) or "setup" (P@x's setup), and gives it
-         the keyboard. Anything else is refused with InvalidArgs. -->
+         the keyboard. "ask-held" (added 16 November 2026, docs/architecture/
+         pax-voice.md section 7) is the ask bar opened by P@x's key: if the
+         key is still held, the bar listens until it is let go. Anything else
+         is refused with InvalidArgs. -->
     <method name="Show">
       <arg name="mode" type="s" direction="in"/>
     </method>

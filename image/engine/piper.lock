@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Speech synthesis for P@x's voice: Piper (piper1-gpl), a GPL-3.0-or-later
+# program that TUR runs as a separate process and never links
+# (image/engine/piper.sh; image/README.md, "Speech";
+# docs/architecture/pax-voice.md, section 3.2).
+#
+# Fedora 45's python3-piper-tts is 1.4.2, which cannot load the voices
+# retrained in November 2026 ("Requires Piper 1.5 or higher"), so TUR
+# installs the release wheel from PyPI, checked against the SHA-256 PyPI
+# publishes (https://pypi.org/pypi/piper-tts/1.8.0/json, read 16 November
+# 2026). The wheel's own dependencies come from Fedora: onnxruntime and
+# pathvalidate.
+PIPER_VERSION=1.8.0
+PIPER_WHEEL=piper_tts-1.8.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl
+PIPER_WHEEL_URL=https://files.pythonhosted.org/packages/84/81/0112a7d510911f33018dc24023d1655bb772f84a4e95fe7f0180f66bbd17/piper_tts-1.8.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl
+PIPER_WHEEL_SHA256=25b4d3f31ff70c8fa7151908e00aaa5650cbdf16bca8fcf21299f3941b89a7d3
+# The corresponding source, which a GPL program must be offered with.
+PIPER_SOURCE_URL=https://files.pythonhosted.org/packages/02/cc/95b18b58d9c235d8e0bcece7321b7a7347873c14f9fea2c734b31ef04ff2/piper_tts-1.8.0.tar.gz
+PIPER_SOURCE_SHA256=830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904
+# Piper is GPL-3.0-or-later; the wheel embeds espeak-ng (GPL-3.0-or-later).
+PIPER_LICENCE="GPL-3.0-or-later"
+# What the wheel needs from Fedora: requires_dist "onnxruntime<2,>=1" and
+# "pathvalidate<4,>=3".
+PIPER_FEDORA_PACKAGES="python3-onnxruntime python3-pathvalidate"

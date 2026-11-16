@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: the Hugging Face API tree of
+# ggerganov/whisper.cpp at the pinned revision (file sizes and LFS SHA-256),
+# the whisper.cpp README (memory) and the community benchmark the project
+# points to (github.com/ggml-org/whisper.cpp/issues/89, encode times), and
+# the Whisper paper (arXiv 2212.04356, Appendix D, Italian WER on FLEURS).
+
+schema_version = 1
+id = "whisper-small-q5-1"
+kind = "recognition"
+name = "Whisper small (5-bit)"
+publisher = "OpenAI (weights), ggml conversion by the whisper.cpp project"
+engine = "whisper.cpp"
+repository = "https://huggingface.co/ggerganov/whisper.cpp"
+revision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+parameters = "small, 244M, quantised to 5 bits (q5_1)"
+# Whisper's multilingual models recognise about 99 languages, Italian
+# included; "auto" lets the model find the language itself.
+languages = ["mul"]
+default_for = []
+# Estimate: the whisper.cpp README's memory for the full-precision model,
+# less the weights it no longer holds at 5 bits. Not measured by TUR.
+memory_bytes = 600000000
+# Estimate, not a TUR measurement: the encode time of one 30-second window
+# with 8 threads on an i7-11800H, whisper.cpp of 2022, from issue #89. An
+# utterance's wait is about one encode (pax-voice.md, section 3.3).
+encode_ms_8_threads = 4830
+speed_basis = "whisper.cpp issue #89: i7-11800H, 8 threads, 2022 build, full-precision model of the same size; an estimate, not a TUR measurement"
+# Whisper paper, Table 13, FLEURS, Italian, full-precision model.
+wer_it_fleurs = 9.8
+note = "For ordinary laptops with AVX2: about one word in ten wrong in Italian on FLEURS, much better than base."
+credit = "none"
+checked = "2026-11-16"
+
+[[files]]
+name = "ggml-small-q5_1.bin"
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin"
+size_bytes = 190085487
+sha256 = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb"
+
+[licence]
+id = "MIT"
+url = "https://github.com/openai/whisper/blob/main/LICENSE"
+summary = "MIT License. You may use, copy, change and share the model for any purpose, commercial use included, if the copyright and licence notice go with it."
+restrictions = "none"
+evidence = "The openai/whisper README says: \"Whisper's code and model weights are released under the MIT License.\" The repository's LICENSE is MIT. The card of ggerganov/whisper.cpp declares MIT. Some Hugging Face cards of the original weights carry Apache-2.0 metadata, which is also permissive."
+checked = "2026-11-16"

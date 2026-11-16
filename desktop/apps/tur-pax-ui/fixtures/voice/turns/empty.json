@@ -1,0 +1,81 @@
+{
+  "hand_written": "Written by hand from docs/architecture/pax-voice.md, section 6 (the service's voice needs a microphone, so it cannot be recorded in CI); not recorded, not compared by desktop/tests/pax-ui/e2e.py.",
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "signals": [
+    {
+      "args": [
+        "listening",
+        {
+          "indicator": "caller",
+          "microphone_open": true,
+          "state": "listening",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        0.02
+      ],
+      "member": "VoiceLevel"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        0.01
+      ],
+      "member": "VoiceLevel"
+    },
+    {
+      "after_stop": true,
+      "args": [
+        "recognising",
+        {
+          "indicator": "caller",
+          "microphone_open": false,
+          "state": "recognising",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        {
+          "audio_seconds": 1.0,
+          "check": "show",
+          "empty": true,
+          "final": true,
+          "language": null,
+          "model": "whisper-base-q5_1",
+          "other_sound": false,
+          "reason": null,
+          "seconds": 0.5,
+          "task": null,
+          "text": ""
+        }
+      ],
+      "member": "VoiceTranscript"
+    },
+    {
+      "args": [
+        "ready",
+        {
+          "indicator": "caller",
+          "microphone_open": false,
+          "reason": "nothing_heard",
+          "state": "ready",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    }
+  ],
+  "turn": "v-1794571291-1"
+}

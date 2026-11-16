@@ -3,10 +3,15 @@
 # The launcher entry of tur-pax-ui, and P@x's keys (docs/architecture/
 # desktop-experience.md, 9.1; the owner's answer 17.1.2). KDE's shortcut
 # service reads X-KDE-Shortcuts from the entry and from each action: the
-# entry's key opens the ask bar, the action "stop" stops P@x's task, the
+# action "ask" opens the ask bar, the action "stop" stops P@x's task, the
 # action "keys" shows P@x's keys on its indicator. Every key here is the one
 # desktop/kit/pax/commands.json gives for the command X-TUR-Pax-Command
 # names; desktop/kit/pax/gen_commands.py --check fails if they disagree.
+#
+# The key that opens the bar is an action of its own, not the entry's, so
+# that only the key asks for "ask-held": the bar opened by the key listens
+# while the key is still held (push-to-talk, docs/architecture/pax-voice.md,
+# section 7); the launcher, which runs the entry, opens the bar for typing.
 # Installed as /usr/share/applications/org.tur.PaxUi.desktop.
 [Desktop Entry]
 Type=Application
@@ -18,12 +23,16 @@ Exec=tur-pax-ui --mode ask
 Icon=org.tur.Pax
 Terminal=false
 Categories=Utility;
-Keywords=assistant;P@x;pax;help;ask;AI;
+Keywords=assistant;P@x;pax;help;ask;AI;voice;
 StartupNotify=false
 SingleMainWindow=true
+Actions=ask;stop;keys;setup;
+
+[Desktop Action ask]
+Name=Ask P@x
+Exec=tur-pax-ui --mode ask-held
 X-KDE-Shortcuts=Meta+Space
 X-TUR-Pax-Command=ask
-Actions=stop;keys;setup;
 
 [Desktop Action stop]
 Name=Stop P@x

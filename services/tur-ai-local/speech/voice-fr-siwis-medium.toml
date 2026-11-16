@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: the Hugging Face API tree of
+# rhasspy/piper-voices at the pinned revision (sizes and LFS SHA-256 of the
+# .onnx file); the .onnx.json file at that revision, hashed; the voice's
+# MODEL_CARD; piper1-gpl's docs/LICENSING.md and docs/COMMERCIAL_USE.md.
+
+schema_version = 1
+id = "voice-fr-siwis-medium"
+kind = "synthesis"
+name = "French: SIWIS"
+publisher = "Open Home Foundation (Piper voices)"
+engine = "piper"
+repository = "https://huggingface.co/rhasspy/piper-voices"
+revision = "e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c"
+parameters = "medium quality (VITS)"
+languages = ["fr"]
+default_for = ["fr"]
+# Estimate: the voice and onnxruntime's working memory. Not measured.
+memory_bytes = 300000000
+speed_basis = "sherpa-onnx's published real-time factors for medium Piper voices on a Raspberry Pi 4 (0.36 to 0.77); not a TUR measurement"
+sample_rate = 22050
+note = "A natural voice that runs faster than real time on any computer TUR supports."
+credit = "Voice trained on the SIWIS French Speech Synthesis Database (CC BY 4.0) and a base on the Hi-Fi TTS dataset by NVIDIA (CC BY 4.0)."
+checked = "2026-11-16"
+
+[voice]
+locale = "fr_FR"
+speaker = "siwis"
+quality = "medium"
+
+[[files]]
+name = "fr_FR-siwis-medium.onnx"
+url = "https://huggingface.co/rhasspy/piper-voices/resolve/e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx"
+size_bytes = 63221984
+sha256 = "b1d946fd68d0347155fa59bce0a018924abbef3c1561181db45ca463d83963ef"
+
+[[files]]
+name = "fr_FR-siwis-medium.onnx.json"
+url = "https://huggingface.co/rhasspy/piper-voices/resolve/e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json"
+size_bytes = 5458
+sha256 = "df814aa3dfedd00510a07144442cc0a220ff21e43d03c3b078444fc0be68fc37"
+
+[licence]
+id = "CC-BY-4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+summary = "Creative Commons Attribution 4.0: use it for any purpose, commercial use included, crediting the SIWIS and Hi-Fi TTS datasets."
+restrictions = "none"
+evidence = "The voice's MODEL_CARD at the pinned revision: SIWIS French Speech Synthesis Database, CC BY 4.0, from the hifi_tts_92 base (Hi-Fi TTS dataset (NVIDIA), CC BY 4.0); requires Piper 1.5 or higher. Listed in piper1-gpl's docs/COMMERCIAL_USE.md."
+checked = "2026-11-16"

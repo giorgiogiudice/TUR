@@ -353,6 +353,60 @@ task_code_registry! {
         user_message: "The control P@x was about to use changed, so P@x did not use it.",
         explanation: "A decision covers the element as it was read. An element that changed could now do something else, so the action is abandoned rather than decided anew without the person.",
         recovery: "None is needed; P@x can read the window again.";
+    VoiceDisabled => "TUR-AI-VOICE-001", Notice,
+        title: "Speaking to the assistant is switched off.",
+        detection: "A voice turn, a live conversation or speech was asked for while the voice settings say voice is off, or while the assistant is off.",
+        user_message: "Speaking to P@x is switched off. You can switch it on in P@x's settings.",
+        explanation: "Voice is off until the person switches it on. Nothing listens and nothing is downloaded before that.",
+        recovery: "Switch on Speak to P@x in the settings of the assistant.";
+    VoiceModelsMissing => "TUR-AI-VOICE-002", Notice,
+        title: "The speech models the assistant needs are not on this computer.",
+        detection: "Local AI reports that the recognition model or the voice in use is not downloaded, or its speech engine is not installed.",
+        user_message: "P@x needs its speech models first. They are downloaded once, and the size is shown before anything is downloaded.",
+        explanation: "Recognition and speech run on this computer with models downloaded from their publishers on first use and checked by their digest. None is in the system image.",
+        recovery: "Download the speech models in P@x's voice settings.";
+    VoiceNoMicrophone => "TUR-AI-VOICE-003", Error,
+        title: "The microphone could not be opened.",
+        detection: "The capture program of the sound server is not installed, could not be started, or ended before the turn did.",
+        user_message: "P@x could not use the microphone. Nothing was heard.",
+        explanation: "The assistant records through the sound server's own capture program. The detail names what failed; no sound is kept.",
+        recovery: "Check that a microphone is connected and chosen in the sound settings, then try again.";
+    VoiceNotVisible => "TUR-AI-VOICE-004", Warning,
+        title: "The microphone would have been open without being shown.",
+        detection: "Listening was asked for while neither the indicator of the assistant nor the program that asked shows that the microphone is on, or a live conversation was asked for without the indicator.",
+        user_message: "P@x listens only while it shows that it is listening, and nothing could show it now.",
+        explanation: "The person must always be able to see when the assistant listens. A live conversation lasts, so only the indicator, which stays on screen, may show it.",
+        recovery: "Make sure P@x's indicator is running, or speak to P@x from its ask bar.";
+    VoiceWakeWordUnavailable => "TUR-AI-VOICE-005", Notice,
+        title: "The wake word is not available in this version.",
+        detection: "The voice settings were asked to turn the wake word on.",
+        user_message: "The wake word is not available in this version of TUR. Hold P@x's key and speak instead.",
+        explanation: "No wake-word detector is built yet. The setting exists so that its rules and its explanation are fixed before it is.",
+        recovery: "Use push-to-talk: hold P@x's key, speak, and let go.";
+    VoiceSpeechFailed => "TUR-AI-VOICE-006", Error,
+        title: "Recognition or speech on this computer failed.",
+        detection: "Local AI's speech command ended with an error, did not answer in time, or answered with something that is not its report.",
+        user_message: "P@x could not understand or say that. Nothing was done.",
+        explanation: "The detail carries local AI's own code. The audio given to recognition is deleted whatever happened.",
+        recovery: "Try again. If it keeps happening, download the speech models again in P@x's voice settings.";
+    VoiceLiveConsent => "TUR-AI-VOICE-007", Notice,
+        title: "A provider's live engine was asked for without the person's consent to it.",
+        detection: "A live conversation with a provider's engine was started, or chosen, without an acceptance of the current consent text for that provider.",
+        user_message: "Before P@x can talk with you through this company's engine, you need to read and accept what will be sent to it.",
+        explanation: "A provider's live engine streams the person's voice to the company. It is used only after the person accepted a text that names the company, for the version of the text in use.",
+        recovery: "Read the text in P@x's voice settings and accept it, or use the local engine.";
+    VoiceTranscriptNotSent => "TUR-AI-VOICE-008", Notice,
+        title: "A spoken request's change was not made because its transcript was not sent.",
+        detection: "A spoken task proposed a change before what was heard was shown long enough or sent, and the person took the request back, or did not send it in time.",
+        user_message: "P@x did not make that change, because what it heard was not confirmed by you on screen.",
+        explanation: "Before anything above observing runs for a spoken request, what was heard is shown. Observing runs at once; a change waits for the transcript.",
+        recovery: "Check what P@x heard and send it, or ask again.";
+    VoiceLiveUnavailable => "TUR-AI-VOICE-009", Notice,
+        title: "The live conversation engine asked for is not available.",
+        detection: "The live engine named is not in the list of live engines, has no address or model, needs a key that is not stored, or is not built in this version.",
+        user_message: "That way of talking with P@x is not available on this computer.",
+        explanation: "Live engines are configuration: the local engine, and providers' live models listed with their transport, address and prices.",
+        recovery: "Choose the local engine, or set up the provider in P@x's settings.";
 }
 
 impl TaskCode {

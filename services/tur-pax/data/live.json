@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "status": "example",
+  "as_of": "2026-11-16",
+  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE list of providers' live (speech-to-speech) engines, read from each provider's own documentation on 2026-11-16 (docs/architecture/pax-providers.md, section 16; docs/reports/pax-voice-1.md). Prices are USD per million tokens, standard pay-as-you-go. A live engine streams the person's voice to the company named; it is used only after the person accepted the consent text for that company. None of these has been run with TUR. The local engine (local recognition, P@x's own model, a local voice) is not listed: it is always offered and needs no key.",
+  "providers": [
+    {
+      "id": "openai-realtime",
+      "name": "OpenAI Realtime",
+      "company": "OpenAI",
+      "family": "openai-realtime",
+      "keyring_item": "openai",
+      "terms_url": "https://developers.openai.com/api/docs/guides/your-data",
+      "data_terms": "As TUR read OpenAI's data page on 2026-11-16: audio sent to the Realtime API is not used for training, is kept up to 30 days for abuse monitoring, and is eligible for zero data retention by agreement. OpenAI's own terms govern.",
+      "models": [
+        {
+          "name": "gpt-realtime-2.1-mini",
+          "prices": { "currency": "USD", "audio_input": 10.0, "audio_output": 20.0, "text_input": 0.6, "text_output": 2.4, "cached_input": 0.3 }
+        },
+        {
+          "name": "gpt-realtime-2.1",
+          "prices": { "currency": "USD", "audio_input": 32.0, "audio_output": 64.0, "text_input": 4.0, "text_output": 24.0, "cached_input": 0.4 }
+        }
+      ],
+      "voices": ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"],
+      "transcription_model": "gpt-4o-mini-transcribe",
+      "built": true
+    },
+    {
+      "id": "gemini-live",
+      "name": "Gemini Live",
+      "company": "Google",
+      "family": "gemini-live",
+      "keyring_item": "google",
+      "terms_url": "https://ai.google.dev/gemini-api/terms",
+      "data_terms": "As TUR read Google's pricing page on 2026-11-16: on the paid tier, what is sent is not used to improve Google's products; on the free tier it is. Google's own terms govern.",
+      "models": [
+        {
+          "name": "gemini-3.8-live",
+          "prices": { "currency": "USD", "audio_input": 3.0, "audio_output": 12.0, "text_input": 0.75, "text_output": 4.5 }
+        }
+      ],
+      "voices": ["Kore", "Puck", "Charon", "Aoede"],
+      "built": true
+    },
+    {
+      "id": "xai-voice",
+      "name": "Grok Voice Agent",
+      "company": "xAI",
+      "family": "openai-realtime",
+      "base_url": "wss://api.x.ai/v1/realtime",
+      "keyring_item": "xai",
+      "terms_url": "https://docs.x.ai/docs/guides/voice/agent",
+      "data_terms": null,
+      "models": [
+        { "name": "grok-voice-3.0", "prices": null }
+      ],
+      "voices": [],
+      "built": true
+    }
+  ]
+}

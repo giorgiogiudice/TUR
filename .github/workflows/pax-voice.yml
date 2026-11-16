@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# P@x's voice on real engines (docs/architecture/pax-voice.md), started by
+# hand only: it downloads models and voices (about 1 GB), so it never runs on
+# a pull request.
+#
+# speech:    whisper.cpp v1.9.5 and Piper 1.8.0 put into a Fedora 45
+#            container by the image's own scripts (image/engine/), driven by
+#            tur-ai-local: TUR's test sentences spoken in English and Italian
+#            by TUR's default voices (no recording of a person), each
+#            recognised by every recognition model, with the word error
+#            rate, the wait and the peak memory per model
+#            (services/tur-ai-local/ci/speech_ci.py). The clips, the engine
+#            and the free tier's model go on to the next job as artifacts.
+# pax-voice: the same clips through P@x: tur-pax with the scripted provider,
+#            the transcript and the task that follows from it
+#            (tests/pax/voice_e2e.py).
+#
+# Checks about TUR fail the workflow. What a model recognises is measured and
+# recorded, and never fails it. Nothing runs on a graphics processor or with
+# a microphone: the runner has neither.
+name: pax-voice
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Recognition models to measure, comma-separated"
+        required: false
+        default: "whisper-tiny-q5-1,whisper-base-q5-1,whisper-small-q5-1,whisper-large-v3-turbo-q5-0"
+
+permissions:
+  contents: read
+  packages: read   # TUR's mirror of the Fedora container (ghcr.io)
+
+concurrency:
+  group: pax-voice-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # As local-ai.yml: quay.io/fedora/fedora:45, pulled from TUR's mirror.
+  FEDORA_IMAGE: quay.io/fedora/fedora:45@sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
+  # The free tier's model, which the second job uses.
+  FREE_MODEL: whisper-base-q5-1
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  speech:
+    name: whisper.cpp and Piper, driven by tur-ai-local
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: FEDORA_IMAGE
+
+      - name: Work folders
+        run: |
+          WORK="$RUNNER_TEMP/pax-voice"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence" "$WORK/clips" "$WORK/engine"
+          chmod 0700 "$WORK/run"
+          python3 -m py_compile services/tur-ai-local/ci/speech_ci.py
+
+      - name: Toolchain
+        working-directory: services/tur-ai-local
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-ai-local/target
+          key: pax-voice-tal-${{ hashFiles('rust-toolchain.toml', 'services/tur-ai-local/Cargo.toml', 'services/tur-ai-local/Cargo.lock') }}
+          restore-keys: pax-voice-tal-
+
+      - name: Build tur-ai-local
+        working-directory: services/tur-ai-local
+        run: |
+          cargo build --release --locked
+          install -m 0755 target/release/tur-ai-local "$WORK/bin/tur-ai-local"
+
+      - name: A Fedora 45 container with whisper.cpp and Piper, as the image has them
+        run: |
+          docker run -d --name fedora --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE_PULL" sleep infinity
+          docker exec fedora dnf -y --setopt=install_weak_deps=False install python3 util-linux 2>&1 | tail -n 5
+          # The image's own scripts: the same pinned archive and wheel, the
+          # same build options, the same layout.
+          docker exec fedora sh -c 'cp -r /w/image/engine /tmp/engine && sh /tmp/engine/whisper-cpp.sh fetch && sh /tmp/engine/whisper-cpp.sh build' \
+            2>&1 | tail -n 60 | tee "$WORK/evidence/whisper-cpp-build.txt"
+          docker exec fedora sh -c 'cp -a /out/. / && mkdir -p /usr/lib/tur && /usr/bin/whisper-cli --help > /dev/null'
+          docker exec fedora sh -c 'sh /tmp/engine/piper.sh fetch && sh /piper/piper.sh install' \
+            2>&1 | tail -n 30 | tee "$WORK/evidence/piper-install.txt"
+          docker exec fedora sh -c 'mkdir -p /usr/share/tur/ai-local/speech && cp /w/services/tur-ai-local/speech/*.toml /usr/share/tur/ai-local/speech/'
+          # The engine for the next job.
+          docker exec fedora sh -c "tar -C / -cf $WORK/engine/whisper.cpp.tar usr/libexec/tur/whisper.cpp usr/bin/whisper-cli && chmod 0644 $WORK/engine/whisper.cpp.tar"
+
+      - name: TUR's test sentences, spoken by TUR's voices
+        run: |
+          docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            python3 -I /w/services/tur-ai-local/ci/speech_ci.py clips \
+              --tal "$WORK/bin/tur-ai-local" --data "$WORK/data" --runtime "$WORK/run" \
+              --evidence "$WORK/evidence" --out "$WORK/clips"
+
+      - name: Every recognition model, on every clip
+        run: |
+          docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            python3 -I /w/services/tur-ai-local/ci/speech_ci.py recognise \
+              --tal "$WORK/bin/tur-ai-local" --data "$WORK/data" --runtime "$WORK/run" \
+              --evidence "$WORK/evidence" --clips "$WORK/clips" --models "${{ inputs.models }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          python3 -I services/tur-ai-local/ci/speech_ci.py summary --evidence "$WORK/evidence" --out "$WORK/evidence/summary.md" >/dev/null || true
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          docker rm -f fedora >/dev/null 2>&1 || true
+
+      - name: The free tier's model and voices for the next job
+        run: |
+          mkdir -p "$WORK/models-free"
+          for id in "$FREE_MODEL" silero-vad-v6.2.0 voice-en-us-ljspeech-medium voice-it-paola-medium; do
+            cp -a "$WORK/data/tur/models/speech/$id" "$WORK/models-free/"
+          done
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: pax-voice-clips
+          path: ${{ runner.temp }}/pax-voice/clips/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: pax-voice-engine
+          path: |
+            ${{ runner.temp }}/pax-voice/engine/
+            ${{ runner.temp }}/pax-voice/models-free/
+            ${{ runner.temp }}/pax-voice/bin/tur-ai-local
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: pax-voice-speech-evidence
+          path: ${{ runner.temp }}/pax-voice/evidence/
+          if-no-files-found: warn
+
+  pax-voice:
+    name: The clips through P@x (scripted provider)
+    needs: speech
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: FEDORA_IMAGE
+
+      - name: Work folders
+        run: |
+          WORK="$RUNNER_TEMP/pax-voice"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          mkdir -p "$WORK/clips" "$WORK/got" "$WORK/data/tur/models/speech" "$WORK/run" "$WORK/evidence"
+          chmod 0700 "$WORK/run"
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: pax-voice-clips
+          path: ${{ runner.temp }}/pax-voice/clips
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: pax-voice-engine
+          path: ${{ runner.temp }}/pax-voice/got
+
+      - name: Toolchain
+        working-directory: services/tur-pax
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-pax/target
+          key: pax-voice-pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock') }}
+          restore-keys: pax-voice-pax-
+
+      - name: Build tur-pax
+        working-directory: services/tur-pax
+        run: cargo build --release --locked
+
+      - name: A Fedora 45 container with the engine of the first job
+        run: |
+          cp -a "$WORK"/got/models-free/. "$WORK/data/tur/models/speech/"
+          install -m 0755 "$WORK/got/bin/tur-ai-local" "$WORK/tur-ai-local"
+          docker run -d --name fedora --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE_PULL" sleep infinity
+          docker exec fedora dnf -y --setopt=install_weak_deps=False install python3 util-linux libgomp vulkan-loader python3-dbus python3-gobject-base dbus-daemon procps-ng 2>&1 | tail -n 5
+          docker exec fedora sh -c "tar -C / -xf $WORK/got/engine/whisper.cpp.tar && /usr/bin/whisper-cli --help > /dev/null"
+          docker exec fedora sh -c 'mkdir -p /usr/lib/tur && cp -r /w/image/engine /tmp/engine && sh /tmp/engine/piper.sh fetch && sh /piper/piper.sh install' | tail -n 5
+          docker exec fedora sh -c 'mkdir -p /usr/share/tur/ai-local/speech && cp /w/services/tur-ai-local/speech/*.toml /usr/share/tur/ai-local/speech/'
+
+      - name: The clips through P@x
+        run: |
+          docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env XDG_DATA_HOME="$WORK/data" XDG_RUNTIME_DIR="$WORK/run" \
+            python3 -I /w/tests/pax/voice_e2e.py \
+              --pax /w/services/tur-pax/target/release/tur-pax \
+              --ai-local "$WORK/tur-ai-local" \
+              --clips "$WORK/clips" --out "$WORK/evidence"
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f fedora >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: pax-voice-evidence
+          path: ${{ runner.temp }}/pax-voice/evidence/
+          if-no-files-found: warn

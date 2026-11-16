@@ -24,6 +24,8 @@ ColumnLayout {
     required property string code
     required property real time
     required property var detail
+    // The person's words came by voice (pax-voice.md, section 7).
+    required property bool spoken
 
     // A card offers setup when the refusal is one that setup cures.
     readonly property bool setupCures: entry.kind === "system" && entry.phase === "refused"
@@ -74,7 +76,9 @@ ColumnLayout {
                         if (entry.phase === "elsewhere")
                             return qsTr("You, from another program")
                         const at = Words.time(entry.time)
-                        return at.length > 0 ? qsTr("%1, %2").arg(Words.you).arg(at) : Words.you
+                        const who = at.length > 0 ? qsTr("%1, %2").arg(Words.you).arg(at) : Words.you
+                        //: The caption of words the person said: "You, 14:02 · Spoken".
+                        return entry.spoken ? qsTr("%1 · %2").arg(who).arg(Words.spokenTag) : who
                     }
                     kind: Kit.Label.Small
                     tone: Kit.Label.Secondary
@@ -109,8 +113,20 @@ ColumnLayout {
             objectName: "paxText"
             Layout.fillWidth: true
             text: entry.text
-            tone: entry.phase === "interim" ? Kit.Label.Secondary : Kit.Label.Primary
+            tone: entry.phase === "interim" || (entry.detail || {}).partial === true ? Kit.Label.Secondary
+                                                                                      : Kit.Label.Primary
             paragraph: true
+            wrapMode: Text.Wrap
+        }
+
+        // P@x stopped speaking because the person spoke.
+        Kit.Label {
+            objectName: "paxInterrupted"
+            Layout.fillWidth: true
+            visible: entry.phase === "said" && (entry.detail || {}).interrupted === true
+            text: Words.interrupted
+            kind: Kit.Label.Small
+            tone: Kit.Label.Secondary
             wrapMode: Text.Wrap
         }
     }
@@ -128,7 +144,21 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: entry.kind === "system"
         phase: entry.phase
-        text: entry.phase === "scheduled" ? qsTr("Asked by a schedule: %1").arg(entry.text) : entry.text
+        text: {
+            switch (entry.phase) {
+            case "scheduled":
+                return qsTr("Asked by a schedule: %1").arg(entry.text)
+            case "live-started":
+                return entry.text.length > 0 ? qsTr("With %1. The microphone is on until the conversation ends.").arg(entry.text)
+                                             : qsTr("The microphone is on until the conversation ends.")
+            case "live-ended": {
+                const why = Words.liveEndReason(String((entry.detail || {}).reason || ""))
+                return [why, entry.text].filter(part => part.length > 0).join(" ")
+            }
+            default:
+                return entry.text
+            }
+        }
         code: entry.code
         actionText: entry.setupCures ? Words.setup : ""
         onActionTriggered: entry.setupRequested()

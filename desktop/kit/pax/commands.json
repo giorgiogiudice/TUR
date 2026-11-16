@@ -22,7 +22,7 @@
       "id": "talk",
       "keys": "Hold Meta+Space",
       "action": "Talk to P@x while held",
-      "boundBy": "tur-pax-ui, through the GlobalShortcuts portal's press and release (design 9.1; task D-17)",
+      "boundBy": "tur-pax-ui's ask bar: the ask key's binding (the action \"ask\" of tur-pax-ui's desktop file) opens the bar as \"ask-held\"; if no release of Space reaches the bar within 350 ms, the bar asks P@x to listen (org.tur.Agent1.StartListening, push-to-talk) until Space is let go, and the service's own limit ends it otherwise (docs/architecture/pax-voice.md, section 7). Not bound by a key of its own, so 'bound' stays false; that the release reaches a layer-shell surface that took the keyboard while the key was held is not verified on KWin. The follow-up is the GlobalShortcuts portal's press and release (design 9.1)",
       "bound": false,
       "verified": false
     },

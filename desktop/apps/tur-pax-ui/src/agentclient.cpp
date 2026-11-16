@@ -38,6 +38,11 @@ const Hook hooks[] = {
     { "SchedulesChanged", SLOT(onSchedulesChanged()) },
     { "MemoryChanged", SLOT(onMemoryChanged()) },
     { "StateChanged", SLOT(onStateChanged(QString)) },
+    { "VoiceStateChanged", SLOT(onVoiceStateChanged(QString,QString)) },
+    { "VoiceLevel", SLOT(onVoiceLevel(QString,double)) },
+    { "VoiceTranscript", SLOT(onVoiceTranscript(QString,QString)) },
+    { "VoiceProgress", SLOT(onVoiceProgress(QString,QString)) },
+    { "LiveEvent", SLOT(onLiveEvent(QString,QString)) },
 };
 
 // Every method of org.tur.Agent1, version 1, with the D-Bus types of its
@@ -81,6 +86,18 @@ const QHash<QString, QStringList> &methods()
         { QStringLiteral("SetMemoryEnabled"), { QStringLiteral("b") } },
         { QStringLiteral("ConfirmMemory"), { QStringLiteral("s") } },
         { QStringLiteral("ForgetMemory"), { QStringLiteral("s") } },
+        // Voice (docs/architecture/pax-voice.md, section 6).
+        { QStringLiteral("GetVoiceStatus"), {} },
+        { QStringLiteral("SetVoiceSettings"), { QStringLiteral("s") } },
+        { QStringLiteral("PrepareVoice"), { QStringLiteral("s") } },
+        { QStringLiteral("CancelVoicePreparation"), {} },
+        { QStringLiteral("StartListening"), { QStringLiteral("s") } },
+        { QStringLiteral("StopListening"), { QStringLiteral("s"), QStringLiteral("b") } },
+        { QStringLiteral("SendTranscript"), { QStringLiteral("s"), QStringLiteral("s") } },
+        { QStringLiteral("Speak"), { QStringLiteral("s") } },
+        { QStringLiteral("StopSpeaking"), {} },
+        { QStringLiteral("StartLiveSession"), { QStringLiteral("s") } },
+        { QStringLiteral("EndLiveSession"), {} },
     };
     return table;
 }
@@ -210,8 +227,10 @@ void AgentClient::start()
         }
     }
     lookForService();
-    if (m_presence == Present)
+    if (m_presence == Present) {
         refresh();
+        refreshVoice();
+    }
 }
 
 void AgentClient::disconnectBus()
@@ -232,6 +251,8 @@ void AgentClient::disconnectBus()
     m_connectionName.clear();
     m_statusInFlight = false;
     m_statusWanted = false;
+    m_voiceInFlight = false;
+    m_voiceWanted = false;
 }
 
 void AgentClient::lookForService()
@@ -270,6 +291,12 @@ void AgentClient::setPresence(Presence presence, const QString &detail)
         m_state.clear();
         Q_EMIT statusChanged();
     }
+    if (presence != Present && (!m_voiceStatus.isEmpty() || m_microphoneOpen)) {
+        m_voiceStatus.clear();
+        m_voice.clear();
+        m_microphoneOpen = false;
+        Q_EMIT voiceChanged();
+    }
     Q_EMIT presenceChanged();
 }
 
@@ -305,6 +332,39 @@ void AgentClient::sendStatusRequest()
     });
 }
 
+void AgentClient::refreshVoice()
+{
+    if (!m_connection || m_presence != Present)
+        return;
+    m_voiceWanted = true;
+    if (m_voiceInFlight)
+        return;
+    QTimer::singleShot(0, this, [this] {
+        if (m_voiceWanted && !m_voiceInFlight)
+            sendVoiceStatusRequest();
+    });
+}
+
+void AgentClient::sendVoiceStatusRequest()
+{
+    m_voiceInFlight = true;
+    m_voiceWanted = false;
+    callWith(QStringLiteral("GetVoiceStatus"), {}, [this](const QVariantMap &reply) {
+        m_voiceInFlight = false;
+        if (reply.value(QStringLiteral("ok")).toBool()) {
+            const QVariantMap status = reply.value(QStringLiteral("value")).toMap();
+            if (!status.isEmpty()) {
+                m_voiceStatus = status;
+                m_voice = status.value(QStringLiteral("state")).toString();
+                m_microphoneOpen = status.value(QStringLiteral("microphone_open")).toBool();
+                Q_EMIT voiceChanged();
+            }
+        }
+        if (m_voiceWanted)
+            sendVoiceStatusRequest();
+    });
+}
+
 int AgentClient::timeoutOf(const QString &method)
 {
     // The password store may ask the person before it answers, and P@x
@@ -313,6 +373,9 @@ int AgentClient::timeoutOf(const QString &method)
     static const QStringList slow = {
         QStringLiteral("SetKey"), QStringLiteral("RemoveKey"), QStringLiteral("HasKey"),
         QStringLiteral("StartTask"), QStringLiteral("ListLocalModels"), QStringLiteral("ListProviderModels"),
+        // A spoken request may start a task; a live session may connect to
+        // the provider the person chose; preparing voice runs local AI.
+        QStringLiteral("SendTranscript"), QStringLiteral("StartLiveSession"), QStringLiteral("PrepareVoice"),
     };
     return slow.contains(method) ? 180000 : 30000;
 }
@@ -373,6 +436,8 @@ void AgentClient::callWith(const QString &method, const QVariantList &arguments,
             values.append(QVariant(argument.toBool()));
         else if (type == QLatin1String("as"))
             values.append(QVariant(argument.toStringList()));
+        else if (type == QLatin1String("d"))
+            values.append(QVariant(argument.toDouble()));
         else
             values.append(QVariant(argument.toString()));
     }
@@ -482,15 +547,66 @@ void AgentClient::onStateChanged(const QString &state)
     refresh();
 }
 
+void AgentClient::onVoiceStateChanged(const QString &state, const QString &details)
+{
+    const QVariant parsed = parseJson(details);
+    const QVariantMap map = parsed.toMap();
+    const bool open = map.contains(QStringLiteral("microphone_open"))
+                          ? map.value(QStringLiteral("microphone_open")).toBool()
+                          : m_microphoneOpen;
+    if (state != m_voice || open != m_microphoneOpen) {
+        m_voice = state;
+        m_microphoneOpen = open;
+        if (!m_voiceStatus.isEmpty()) {
+            m_voiceStatus.insert(QStringLiteral("state"), state);
+            m_voiceStatus.insert(QStringLiteral("microphone_open"), open);
+        }
+        Q_EMIT voiceChanged();
+    }
+    Q_EMIT voiceStateChanged(state, parsed);
+    refreshVoice();
+}
+
+void AgentClient::onVoiceLevel(const QString &turn, double level)
+{
+    Q_EMIT voiceLevel(turn, qBound(0.0, level, 1.0));
+}
+
+void AgentClient::onVoiceTranscript(const QString &turn, const QString &details)
+{
+    Q_EMIT voiceTranscript(turn, parseJson(details));
+}
+
+void AgentClient::onVoiceProgress(const QString &model, const QString &event)
+{
+    const QVariant parsed = parseJson(event);
+    Q_EMIT voiceProgress(model, parsed);
+    const QString name = parsed.toMap().value(QStringLiteral("event")).toString();
+    if (name == QLatin1String("ready") || name == QLatin1String("failed") || name == QLatin1String("cancelled"))
+        refreshVoice();
+}
+
+void AgentClient::onLiveEvent(const QString &session, const QString &event)
+{
+    const QVariant parsed = parseJson(event);
+    Q_EMIT liveEvent(session, parsed);
+    const QString kind = parsed.toMap().value(QStringLiteral("kind")).toString();
+    if (kind == QLatin1String("started") || kind == QLatin1String("ended") || kind == QLatin1String("usage"))
+        refresh();
+}
+
 void AgentClient::onServiceRegistered()
 {
     setPresence(Present, QString());
     refresh();
+    refreshVoice();
 }
 
 void AgentClient::onServiceUnregistered()
 {
     lookForService();
-    if (m_presence == Present)
+    if (m_presence == Present) {
         refresh();
+        refreshVoice();
+    }
 }

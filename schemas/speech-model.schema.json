@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/speech-model.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR speech catalogue entry",
+  "description": "One speech recognition model, voice activity detector or voice that TUR offers to run on the person's own computer for P@x's voice (docs/architecture/pax-voice.md). Written in TOML, one file per entry, in services/tur-ai-local/speech/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/speech.rs) is authoritative and also enforces: the file is named <id>.toml; every file URL names the pinned revision and ends with the file's name; a recognition model is one .bin file with encode_ms_8_threads; a voice detector is one .bin file; a voice is one .onnx file and its .onnx.json, speaks one language, has a sample_rate and [voice]; default_for names languages the voice speaks, and no language has two default voices; memory_bytes is at least the files; ids and file names are unique.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "name",
+    "publisher",
+    "engine",
+    "repository",
+    "revision",
+    "parameters",
+    "languages",
+    "memory_bytes",
+    "speed_basis",
+    "note",
+    "credit",
+    "checked",
+    "files",
+    "licence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "description": "Stable identifier: lower-case letters, digits, '.' and '-'.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$"
+    },
+    "kind": {
+      "description": "What it is.",
+      "enum": [
+        "recognition",
+        "synthesis",
+        "voice-activity"
+      ]
+    },
+    "name": {
+      "description": "The name shown to a person.",
+      "type": "string",
+      "minLength": 1
+    },
+    "publisher": {
+      "description": "Who made and publishes it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "engine": {
+      "description": "The program that uses it.",
+      "enum": [
+        "whisper.cpp",
+        "piper"
+      ]
+    },
+    "repository": {
+      "description": "The publisher's repository.",
+      "$ref": "#/$defs/https_url"
+    },
+    "revision": {
+      "description": "The commit the URLs are pinned to.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "parameters": {
+      "description": "Its size as the publisher states it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "languages": {
+      "description": "Languages it recognises or speaks.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "description": "A two-letter BCP 47 primary language tag, or mul for a multilingual model.",
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 3
+      }
+    },
+    "default_for": {
+      "description": "The languages it is the default voice for.",
+      "type": "array",
+      "items": {
+        "description": "A two-letter BCP 47 primary language tag, or mul for a multilingual model.",
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 3
+      }
+    },
+    "memory_bytes": {
+      "description": "The memory it needs; an estimate whose basis is speed_basis.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "encode_ms_8_threads": {
+      "description": "A recognition model's encode time for one 30-second window with 8 threads, in milliseconds: the reference of the speed rule. An estimate.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "speed_basis": {
+      "description": "Where the speed and memory figures come from.",
+      "type": "string",
+      "minLength": 1
+    },
+    "wer_it_fleurs": {
+      "description": "Word error rate on Italian FLEURS, in percent, where published.",
+      "type": "number"
+    },
+    "sample_rate": {
+      "description": "A voice's sample rate.",
+      "type": "integer",
+      "minimum": 8000
+    },
+    "voice": {
+      "description": "A voice's speaker.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locale",
+        "speaker",
+        "quality"
+      ],
+      "properties": {
+        "locale": {
+          "type": "string",
+          "minLength": 2
+        },
+        "speaker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quality": {
+          "enum": [
+            "x_low",
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "note": {
+      "description": "What it is good for, in plain words.",
+      "type": "string",
+      "minLength": 1
+    },
+    "credit": {
+      "description": "The attribution its licence asks for, shown with it; exactly none when there is none.",
+      "type": "string",
+      "minLength": 1
+    },
+    "checked": {
+      "$ref": "#/$defs/date"
+    },
+    "files": {
+      "description": "Its files.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/model_file"
+      }
+    },
+    "licence": {
+      "$ref": "#/$defs/licence"
+    }
+  },
+  "$defs": {
+    "https_url": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "model_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "description": "The publisher's file name, also the stored name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "description": "The publisher's download URL, pinned to the revision.",
+          "$ref": "#/$defs/https_url"
+        },
+        "size_bytes": {
+          "description": "The exact size; a file of another size is refused.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "description": "The SHA-256 of the whole file; a file with another digest is refused.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "licence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "url",
+        "summary",
+        "restrictions",
+        "evidence",
+        "checked"
+      ],
+      "properties": {
+        "id": {
+          "description": "SPDX expression, or LicenseRef- for a licence SPDX does not list.",
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "$ref": "#/$defs/https_url"
+        },
+        "summary": {
+          "description": "What the licence lets a person do, in plain sentences.",
+          "type": "string",
+          "minLength": 1
+        },
+        "restrictions": {
+          "description": "Exactly none, or the use restrictions in plain sentences, followed through every base a voice was trained from.",
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "description": "What was read to establish the licence.",
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    }
+  }
+}

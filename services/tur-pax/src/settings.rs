@@ -1494,7 +1494,19 @@ pub struct Paths {
     /// Where the lists of models the providers gave are kept, one file per
     /// provider.
     pub listing: PathBuf,
+    /// The voice settings (`docs/architecture/pax-voice.md`).
+    pub voice: PathBuf,
+    /// Where the list of live engines is looked for, in order.
+    pub live: Vec<PathBuf>,
+    /// The sound server's programs: capture, playback, and its description.
+    pub sound: crate::audio::SoundPrograms,
 }
+
+/// The list of live engines an administrator may put in place.
+pub const ADMIN_LIVE: &str = "/etc/tur/pax/live.json";
+
+/// The list of live engines shipped with the system.
+pub const SHIPPED_LIVE: &str = "/usr/share/tur/pax/live.json";
 
 /// The model list an administrator may put in place.
 pub const ADMIN_MODELS: &str = "/etc/tur/pax/models.json";
@@ -1536,6 +1548,9 @@ impl Paths {
             runtime: None,
             ai_local: PathBuf::from(crate::local::AI_LOCAL),
             listing: state.join("model-lists"),
+            voice: config.join("voice.json"),
+            live: vec![PathBuf::from(ADMIN_LIVE), PathBuf::from(SHIPPED_LIVE)],
+            sound: crate::audio::SoundPrograms::default(),
         })
     }
 

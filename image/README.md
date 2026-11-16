@@ -11,7 +11,7 @@ The TUR operating system is one bootc container image, defined by
 | `programs.tsv` | The TUR programs compiled into the image: component, program, where it is installed |
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
 | `files.tsv` | Data and units of the components that go with the programs: P@x's model list and units, the local AI model catalogue |
-| `engine/` | The local AI engine, llama.cpp, built from its source in a stage of its own: the pinned version (`llama-cpp.lock`) and the build script (section "The local AI engine") |
+| `engine/` | The local AI engine, llama.cpp, built from its source in a stage of its own: the pinned version (`llama-cpp.lock`) and the build script (section "The local AI engine"); whisper.cpp and Piper for P@x's voice (`whisper-cpp.*`, `piper.*`; section "Speech") |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
 | `branding/` | What replaces Fedora's marks: the script the build runs, the pinned replacement packages, Firefox's policy (section "Fedora's marks") |
 | `signing/` | The script that adds TUR's rule to the container policy at build time (section "Signed updates") |
@@ -209,6 +209,41 @@ licence notices the script copies out of the source are still where it looks
 (the stage fails when one is empty). Once Fedora builds `llama-cpp` with the
 processor variants and Vulkan and without a hard ROCm dependency, the stage
 can give way to the package.
+
+## Speech
+
+P@x's voice ([pax-voice.md](../docs/architecture/pax-voice.md), sections 3
+and 9) needs two programs that are not Fedora packages the image can use.
+Both are put in by the build stage `speech` (`FROM … AS speech`) and the
+final stage; neither model nor voice is in the image.
+
+| In the image | What |
+|---|---|
+| `/usr/libexec/tur/whisper.cpp/whisper-cli` | whisper.cpp v1.9.5's recogniser, built from its source exactly as llama.cpp above (`engine/whisper-cpp.lock`, `engine/whisper-cpp.sh`): every x86-64 processor variant, the Vulkan backend, its libraries beside it. Fedora 45's `whisper-cpp` ships no `whisper-cli`, has no AVX2 kernels and no Vulkan. `whisper-server` is not built |
+| `/usr/bin/whisper-cli` | A link to it |
+| `/usr/share/licenses/whisper.cpp/` | whisper.cpp's licence (MIT) and the notices of the single-file libraries its command line compiles in, as found in the source |
+| `/usr/libexec/tur/piper/` | Piper (piper1-gpl) 1.8.0, **GPL-3.0-or-later**: the wheel from PyPI pinned by SHA-256 (`engine/piper.lock`), unpacked into a virtual environment that uses Fedora's `python3-onnxruntime` and `python3-pathvalidate`; `bin/piper` runs it. Fedora 45's `python3-piper-tts` is 1.4.2, too old for the retrained voices |
+| `/usr/share/licenses/piper/` | The GPL text from the wheel and a README naming its source archive and SHA-256 |
+| `/usr/share/tur/ai-local/speech/*.toml` | The speech catalogue (`image/files.tsv`) |
+
+- **Network:** the `speech` stage's fetch step downloads the build tools, the
+  whisper.cpp archive and the Piper wheel, each archive checked against its
+  SHA-256; the compile step has no network. The final stage installs Fedora's
+  `python3-onnxruntime` and `python3-pathvalidate` from the base's
+  repositories (the versions of the day of the build, listed in the build
+  log) and unpacks the checked wheel without pip.
+- **Checks:** `whisper-cli --help` and `piper --help` must run in the final
+  stage; the stage fails if a library, a processor variant or the Vulkan
+  backend is missing.
+- **A GPL program in the image:** Piper is started by `tur-ai-local speech
+  tts` as a separate process and receives text on its standard input; TUR
+  links nothing of it (AGENTS.md, licence boundary). Shipping it obliges TUR
+  to offer its source: the README in its licence folder names it.
+- **Not verified:** nothing of this stage has been built (GitHub Actions is
+  disabled for the owner's account as of 16 November 2026); in particular,
+  that whisper.cpp v1.9.5's CMake places its libraries where the script
+  copies them from, and that the Piper wheel runs on Fedora 45's Python and
+  onnxruntime 1.26.
 
 ## Boot health and rollback
 

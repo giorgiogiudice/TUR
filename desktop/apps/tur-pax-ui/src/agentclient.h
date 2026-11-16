@@ -48,6 +48,15 @@ class AgentClient : public QObject
     // off, idle, working or paused: the State property, as StateChanged and
     // GetStatus last said.
     Q_PROPERTY(QString serviceState READ serviceState NOTIFY statusChanged FINAL)
+    // The last answer of GetVoiceStatus (pax-voice.md, 6.4); empty until one
+    // came.
+    Q_PROPERTY(QVariantMap voiceStatus READ voiceStatus NOTIFY voiceChanged FINAL)
+    // off, unavailable, ready, listening, recognising, waiting, speaking or
+    // live: the Voice property, as VoiceStateChanged and GetVoiceStatus last
+    // said.
+    Q_PROPERTY(QString voice READ voice NOTIFY voiceChanged FINAL)
+    // Whether P@x's microphone is open: the MicrophoneOpen property.
+    Q_PROPERTY(bool microphoneOpen READ microphoneOpen NOTIFY voiceChanged FINAL)
 
 public:
     enum Presence {
@@ -85,6 +94,9 @@ public:
     QVariantMap status() const { return m_status; }
     bool statusKnown() const { return !m_status.isEmpty(); }
     QString serviceState() const { return m_state; }
+    QVariantMap voiceStatus() const { return m_voiceStatus; }
+    QString voice() const { return m_voice; }
+    bool microphoneOpen() const { return m_microphoneOpen; }
 
     // Connects to the bus, finds out whether the service is there, listens
     // to its signals and asks for its status. Called again after the bus
@@ -93,6 +105,8 @@ public:
     // Asks for the status again. Requests that come while one is on its way
     // are folded into one more.
     Q_INVOKABLE void refresh();
+    // Asks for the voice status again, folded like refresh().
+    Q_INVOKABLE void refreshVoice();
 
     // Calls `method` of org.tur.Agent1 with `arguments`. `callback`, if it is
     // a function, is called once with an object:
@@ -117,6 +131,7 @@ Q_SIGNALS:
     void autoStartChanged();
     void presenceChanged();
     void statusChanged();
+    void voiceChanged();
 
     // org.tur.Agent1's signals, their JSON documents parsed.
     void taskStarted(const QString &task, const QVariant &details);
@@ -129,6 +144,12 @@ Q_SIGNALS:
     void schedulesChanged();
     void memoryChanged();
     void stateChanged(const QString &state);
+    // Voice (pax-voice.md, 6.2). The level is a number from 0 to 1, not JSON.
+    void voiceStateChanged(const QString &state, const QVariant &details);
+    void voiceLevel(const QString &turn, double level);
+    void voiceTranscript(const QString &turn, const QVariant &details);
+    void voiceProgress(const QString &model, const QVariant &event);
+    void liveEvent(const QString &session, const QVariant &event);
 
 private Q_SLOTS:
     void onTaskStarted(const QString &task, const QString &details);
@@ -141,6 +162,11 @@ private Q_SLOTS:
     void onSchedulesChanged();
     void onMemoryChanged();
     void onStateChanged(const QString &state);
+    void onVoiceStateChanged(const QString &state, const QString &details);
+    void onVoiceLevel(const QString &turn, double level);
+    void onVoiceTranscript(const QString &turn, const QString &details);
+    void onVoiceProgress(const QString &model, const QString &event);
+    void onLiveEvent(const QString &session, const QString &event);
     void onServiceRegistered();
     void onServiceUnregistered();
 
@@ -149,6 +175,7 @@ private:
     void lookForService();
     void setPresence(Presence presence, const QString &detail);
     void sendStatusRequest();
+    void sendVoiceStatusRequest();
     static int timeoutOf(const QString &method);
 
     QString m_busAddress;
@@ -165,4 +192,10 @@ private:
 
     bool m_statusInFlight = false;
     bool m_statusWanted = false;
+
+    QVariantMap m_voiceStatus;
+    QString m_voice;
+    bool m_microphoneOpen = false;
+    bool m_voiceInFlight = false;
+    bool m_voiceWanted = false;
 };

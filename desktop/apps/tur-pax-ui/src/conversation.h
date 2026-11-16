@@ -23,6 +23,14 @@
 //            was stopped or failed, a task P@x started on a schedule.
 //            `state` says which; `code` is the TUR-AI-* code if there is one
 //   summary  the end of a task that completed: `detail` has the counts
+//   pax      also P@x's spoken words in a live conversation: `state` "said"
+//
+// A row of the person's words that came by voice has `spoken` set: a
+// spoken request (VoiceTranscript), or what the person said in a live
+// conversation (LiveEvent "heard"). In a live conversation, a `you` row's
+// `state` is "heard" (the person's words, which the service may take as a
+// request or add to the running task) and a `system` row says that the
+// conversation started or ended ("live-started", "live-ended").
 //
 // The words of P@x and of the system are kept apart, as the design asks,
 // because the service already keeps them apart (TextAdded's kind).
@@ -57,6 +65,12 @@ class Conversation : public QAbstractListModel
     //   dayLimitCost, dayLimitTokens, taskLimitCost, taskLimitTokens
     //   dayLimitReached
     Q_PROPERTY(QVariantMap spend READ spend NOTIFY spendChanged FINAL)
+    // The live conversation that runs, or empty (pax-voice.md, section 5).
+    Q_PROPERTY(QString liveSession READ liveSession NOTIFY liveChanged FINAL)
+    Q_PROPERTY(bool live READ live NOTIFY liveChanged FINAL)
+    // The live conversation was asked for and the service has not said yet
+    // that it started.
+    Q_PROPERTY(bool liveStarting READ liveStarting NOTIFY liveChanged FINAL)
 
 public:
     enum Role {
@@ -68,6 +82,7 @@ public:
         CodeRole,
         TimeRole,
         DetailRole,
+        SpokenRole,
     };
     Q_ENUM(Role)
 
@@ -88,6 +103,9 @@ public:
     QString lastTask() const { return m_lastTask; }
     QString lastOutcome() const { return m_lastOutcome; }
     QVariantMap spend() const;
+    QString liveSession() const { return m_liveSession; }
+    bool live() const { return !m_liveSession.isEmpty(); }
+    bool liveStarting() const { return m_liveStarting; }
 
     // Sends a request to P@x: shows the person's words at once and asks the
     // service to start the task. A refusal becomes a system card.
@@ -96,6 +114,14 @@ public:
     Q_INVOKABLE void stop();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void resume();
+    // Sends what was heard in a spoken turn, as the person left it in the
+    // field (SendTranscript): shown at once as the person's spoken words.
+    Q_INVOKABLE void sendTranscript(const QString &turn, const QString &text);
+    // Starts a live conversation (StartLiveSession) with the engine of the
+    // voice settings, or ends the one that runs (EndLiveSession). A refusal
+    // becomes a system card.
+    Q_INVOKABLE void startLive();
+    Q_INVOKABLE void endLive();
     Q_INVOKABLE void clear();
     // One entry as an object with the role names as keys; for tests.
     Q_INVOKABLE QVariantMap entry(int row) const;
@@ -111,12 +137,16 @@ public Q_SLOTS:
     void actionProposed(const QString &task, const QVariant &step);
     void actionCompleted(const QString &task, const QVariant &step);
     void taskFinished(const QString &task, const QVariant &result);
+    // Voice (pax-voice.md, 6.2).
+    void voiceTranscript(const QString &turn, const QVariant &details);
+    void liveEvent(const QString &session, const QVariant &event);
 
 Q_SIGNALS:
     void clientChanged();
     void countChanged();
     void taskChanged();
     void spendChanged();
+    void liveChanged();
     // A task started, or something happened that the person should see:
     // the window opens its panel.
     void attentionWanted();
@@ -132,6 +162,7 @@ private:
         QString code;
         qint64 time = 0;
         QVariantMap detail;
+        bool spoken = false;
     };
 
     void append(const Entry &entry);
@@ -140,6 +171,8 @@ private:
     int findPending(const QString &request) const;
     void updateStep(const QString &task, const QVariantMap &step);
     void setTask(const QString &task);
+    void setLive(const QString &session, bool starting);
+    int lastLiveRow(const QString &kind, const QString &state) const;
     QVariantMap today() const;
 
     QPointer<AgentClient> m_client;
@@ -155,4 +188,6 @@ private:
     QVariant m_lastCost;
     QString m_lastCurrency;
     qint64 m_lastTokens = -1;
+    QString m_liveSession;
+    bool m_liveStarting = false;
 };

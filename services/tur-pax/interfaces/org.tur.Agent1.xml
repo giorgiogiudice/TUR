@@ -5,7 +5,8 @@
   org.tur.Agent1: the session service of P@x, TUR's assistant.
 
   Served by `tur-pax serve` on the session bus, at /org/tur/Agent1.
-  Described in docs/architecture/pax-service.md. Interface version 1.
+  Described in docs/architecture/pax-service.md, and its voice in
+  docs/architecture/pax-voice.md. Interface version 1.
 
   Structured values are JSON text in a string argument; their members are
   listed in the document. A method that fails replies with the error
@@ -142,6 +143,43 @@
     <method name="ForgetMemory">
       <arg name="entry" type="s" direction="in"/>
     </method>
+    <!-- Voice (docs/architecture/pax-voice.md). Recognition and speech run
+         on this computer unless the person chose a provider's live engine.
+         The microphone is open only between StartListening and the end of
+         the turn, or for a live session; MicrophoneOpen says when. -->
+    <method name="GetVoiceStatus">
+      <arg name="status" type="s" direction="out"/>
+    </method>
+    <method name="SetVoiceSettings">
+      <arg name="settings" type="s" direction="in"/>
+    </method>
+    <method name="PrepareVoice">
+      <arg name="options" type="s" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+    <method name="CancelVoicePreparation"/>
+    <method name="StartListening">
+      <arg name="options" type="s" direction="in"/>
+      <arg name="turn" type="s" direction="out"/>
+    </method>
+    <method name="StopListening">
+      <arg name="turn" type="s" direction="in"/>
+      <arg name="send" type="b" direction="in"/>
+    </method>
+    <method name="SendTranscript">
+      <arg name="turn" type="s" direction="in"/>
+      <arg name="text" type="s" direction="in"/>
+      <arg name="task" type="s" direction="out"/>
+    </method>
+    <method name="Speak">
+      <arg name="text" type="s" direction="in"/>
+    </method>
+    <method name="StopSpeaking"/>
+    <method name="StartLiveSession">
+      <arg name="options" type="s" direction="in"/>
+      <arg name="session" type="s" direction="out"/>
+    </method>
+    <method name="EndLiveSession"/>
     <!-- What happens, as it happens -->
     <signal name="TaskStarted">
       <arg name="task" type="s"/>
@@ -177,6 +215,26 @@
       <arg name="model" type="s"/>
       <arg name="event" type="s"/>
     </signal>
+    <signal name="VoiceStateChanged">
+      <arg name="state" type="s"/>
+      <arg name="details" type="s"/>
+    </signal>
+    <signal name="VoiceLevel">
+      <arg name="turn" type="s"/>
+      <arg name="level" type="d"/>
+    </signal>
+    <signal name="VoiceTranscript">
+      <arg name="turn" type="s"/>
+      <arg name="details" type="s"/>
+    </signal>
+    <signal name="VoiceProgress">
+      <arg name="model" type="s"/>
+      <arg name="event" type="s"/>
+    </signal>
+    <signal name="LiveEvent">
+      <arg name="session" type="s"/>
+      <arg name="event" type="s"/>
+    </signal>
     <property name="State" type="s" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
     </property>
@@ -185,6 +243,12 @@
     </property>
     <property name="InterfaceVersion" type="u" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="const"/>
+    </property>
+    <property name="Voice" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="MicrophoneOpen" type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
     </property>
   </interface>
   <interface name="org.freedesktop.DBus.Properties">

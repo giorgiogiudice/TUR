@@ -1,0 +1,684 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/ai-local-speech.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "tur-ai-local speech reports",
+  "description": "What `tur-ai-local speech ... --json` prints (services/tur-ai-local/src/cli.rs and src/speech.rs; docs/architecture/pax-voice.md). `speech ensure --json` prints one speech_ensure_event per line.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/models_report"
+    },
+    {
+      "$ref": "#/$defs/recommend_report"
+    },
+    {
+      "$ref": "#/$defs/speech_ensure_event"
+    },
+    {
+      "$ref": "#/$defs/cancel_report"
+    },
+    {
+      "$ref": "#/$defs/remove_report"
+    },
+    {
+      "$ref": "#/$defs/stt_report"
+    },
+    {
+      "$ref": "#/$defs/tts_report"
+    }
+  ],
+  "$defs": {
+    "code": {
+      "description": "A stable TUR local AI code.",
+      "type": "string",
+      "pattern": "^TUR-AI-LOCAL-[0-9]{3}$"
+    },
+    "nullable_code": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/code"
+        }
+      ]
+    },
+    "tier": {
+      "enum": [
+        "runs-well",
+        "slow",
+        "does-not-fit"
+      ]
+    },
+    "licence_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "url",
+        "summary",
+        "restrictions",
+        "restricts_use"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "restrictions": {
+          "type": "string"
+        },
+        "restricts_use": {
+          "type": "boolean"
+        }
+      }
+    },
+    "file_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "voice_view": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "locale",
+        "speaker",
+        "quality"
+      ],
+      "properties": {
+        "locale": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "quality": {
+          "type": "string"
+        }
+      }
+    },
+    "speech_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "publisher",
+        "engine",
+        "languages",
+        "default_for",
+        "download_bytes",
+        "memory_bytes",
+        "installed",
+        "problem",
+        "tier",
+        "reasons",
+        "expected_ms",
+        "wer_it_fleurs",
+        "sample_rate",
+        "voice",
+        "licence",
+        "credit",
+        "note",
+        "files"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$"
+        },
+        "kind": {
+          "enum": [
+            "recognition",
+            "synthesis",
+            "voice-activity"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "whisper.cpp",
+            "piper"
+          ]
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "default_for": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "download_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "installed": {
+          "enum": [
+            "installed",
+            "absent",
+            "damaged"
+          ]
+        },
+        "problem": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "$ref": "#/$defs/tier"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wer_it_fleurs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sample_rate": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "voice": {
+          "$ref": "#/$defs/voice_view"
+        },
+        "licence": {
+          "$ref": "#/$defs/licence_view"
+        },
+        "credit": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/file_view"
+          }
+        }
+      }
+    },
+    "models_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "catalogue",
+        "language",
+        "models"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "speech-models"
+        },
+        "catalogue": {
+          "type": "string"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/speech_view"
+          }
+        }
+      }
+    },
+    "recommended_recognition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "tier",
+        "reasons",
+        "expected_ms",
+        "installed",
+        "download_bytes",
+        "memory_bytes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/tier"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "download_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "recommended_part": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "installed",
+        "download_bytes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "download_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "recommended_voice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "language",
+        "id",
+        "name",
+        "installed",
+        "download_bytes",
+        "licence",
+        "credit"
+      ],
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "download_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "licence": {
+          "$ref": "#/$defs/licence_view"
+        },
+        "credit": {
+          "type": "string"
+        }
+      }
+    },
+    "recommend_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "language",
+        "recognition",
+        "vad",
+        "voices",
+        "download_bytes_needed",
+        "free",
+        "message"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "speech-recommend"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recognition": {
+          "$ref": "#/$defs/recommended_recognition"
+        },
+        "vad": {
+          "$ref": "#/$defs/recommended_part"
+        },
+        "voices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recommended_voice"
+          }
+        },
+        "download_bytes_needed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "free": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "speech_ensure_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "event",
+        "model",
+        "code",
+        "message",
+        "file",
+        "bytes_done",
+        "bytes_total",
+        "bytes_to_download",
+        "free_bytes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "speech-ensure-event"
+        },
+        "event": {
+          "enum": [
+            "plan",
+            "progress",
+            "verified",
+            "installed",
+            "already-present",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "code": {
+          "$ref": "#/$defs/nullable_code"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bytes_done": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bytes_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bytes_to_download": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "free_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "cancel_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "speech-cancel"
+        },
+        "code": {
+          "$ref": "#/$defs/code"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "remove_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "model",
+        "code",
+        "message",
+        "freed_bytes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "speech-remove"
+        },
+        "model": {
+          "type": "string"
+        },
+        "code": {
+          "$ref": "#/$defs/code"
+        },
+        "message": {
+          "type": "string"
+        },
+        "freed_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "stt_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "model",
+        "language",
+        "text",
+        "audio_seconds",
+        "seconds",
+        "vad"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "stt"
+        },
+        "model": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "text": {
+          "description": "What was recognised, without the marks for silence; empty when nothing was said.",
+          "type": "string"
+        },
+        "audio_seconds": {
+          "type": "number"
+        },
+        "seconds": {
+          "description": "Wall time of the recognition.",
+          "type": "number"
+        },
+        "vad": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tts_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "voice",
+        "output",
+        "sample_rate",
+        "audio_seconds",
+        "seconds",
+        "credit"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "tts"
+        },
+        "voice": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "audio_seconds": {
+          "type": "number"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "credit": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

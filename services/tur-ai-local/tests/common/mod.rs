@@ -32,6 +32,10 @@ pub fn seed_catalogue() -> PathBuf {
     Path::new(COMPONENT).join("catalogue")
 }
 
+pub fn speech_catalogue() -> PathBuf {
+    Path::new(COMPONENT).join("speech")
+}
+
 pub fn fake_engine() -> PathBuf {
     Path::new(COMPONENT).join("tests/fixtures/fake-llama-server")
 }
@@ -45,6 +49,8 @@ pub fn schema(name: &str) -> Value {
 
 const KNOWN_KEYWORDS: &[&str] = &[
     "$schema",
+    // An annotation: the speech schemas carry their SPDX line in it.
+    "$comment",
     "$id",
     "title",
     "description",

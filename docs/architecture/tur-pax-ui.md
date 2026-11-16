@@ -27,7 +27,8 @@ section 9 lists what it will need.
 
 | Part | Design | Built |
 |---|---|---|
-| Ask bar | 9.2: one line, 640 px, opened by P@x's key, closed by Esc or when it loses the keyboard while empty | Yes. Enter sends; the bar becomes the panel when the task starts. Voice is shown as "coming later" with the control there and unavailable |
+| Ask bar | 9.2: one line, 640 px, opened by P@x's key, closed by Esc or when it loses the keyboard while empty | Yes. Enter sends; the bar becomes the panel when the task starts. Since 16 November 2026 a microphone ("Speak to P@x") and "Talk with P@x" (section 13) |
+| Voice | 9.1 (hold Meta+Space), [pax-voice.md](pax-voice.md) section 7 | The microphone in the bar and the panel, the level meter, "Listening…", "Recognising…", what was heard in the field (sent after 2 s or on Enter), push-to-talk by the held key, a live conversation in the panel with End, the voice screen of setup (section 13). Against a hand-written stand-in only: nothing of it has run |
 | Conversation panel | 9.2: 420 px along the right edge; header with the AI and the cost; the person's words, P@x's words and the system's apart; steps with "Details"; Stop and Pause with their keys while a task runs; a field that takes words at any time | Yes, all of it (section 4). "Show me / Do it for me" is not: the service has no guide mode (section 10) |
 | Activity | Settings ▸ P@x ▸ Activity (9.11, task D-19) | A view in the panel over `ListActivity`; the settings page is D-19's |
 | P@x is off, not ready, not there | 9.1: the small card with "Set up P@x" | Yes, plus the service's own reason and code when P@x is on but cannot take a task, and a plain message when the service is absent |
@@ -88,8 +89,14 @@ interface.
   `TUR-AI-KEY-004`) and the service's own sentence, which is what the window
   shows; the window adds no words of its own to a refusal.
 - **Signals** (`TaskStarted`, `TextAdded`, `ActionProposed`,
-  `ActionCompleted`, `TaskFinished`, `LocalModelProgress`, `StateChanged`, …)
-  are passed on with their JSON parsed.
+  `ActionCompleted`, `TaskFinished`, `LocalModelProgress`, `StateChanged`,
+  and voice's `VoiceStateChanged`, `VoiceLevel` (a number, 0 to 1),
+  `VoiceTranscript`, `VoiceProgress`, `LiveEvent`) are passed on with their
+  JSON parsed.
+- **Voice status.** `GetVoiceStatus` at start and after every
+  `VoiceStateChanged`, folded like the status; the client's `voice` and
+  `microphoneOpen` follow `VoiceStateChanged` at once, so that the window's
+  microphone mark is never later than the service's.
 - **Presence.** Present when the name is owned or the bus can start it;
   absent otherwise, with the reason. The window, which a person opened, may
   start the service through D-Bus activation; the stop key never does
@@ -188,10 +195,10 @@ switched on either way; the key is stored before it.
 
 | Command | Keys | Bound by `data/org.tur.PaxUi.desktop` | Runs |
 |---|---|---|---|
-| `ask` | Meta+Space | the entry's `X-KDE-Shortcuts` | `tur-pax-ui --mode ask`: the bar, or the open window shows it |
-| `stop` | Meta+Esc | the action `stop` | `tur-pax-ui --stop`: `CancelTask("")` with "no auto start": stops the running task; if P@x is not running it says so and starts nothing |
+| `ask` | Meta+Space | the action `ask` (moved from the entry on 16 November 2026, so that the launcher, which runs the entry, does not ask for "ask-held") | `tur-pax-ui --mode ask-held`: the bar, or the open window shows it (`org.tur.PaxUi1.Show("ask-held")`); if the key is still held, the bar listens (`talk`) |
+| `stop` | Meta+Esc | the action `stop` | `tur-pax-ui --stop`: `CancelTask("")` with "no auto start": stops the running task, and, since voice, closes P@x's microphone and ends a live conversation (pax-voice.md, 6.1); if P@x is not running it says so and starts nothing |
 | `keys` | Meta+/ | the action `keys` | `tur-pax-ui --show-keys`: toggles the list on P@x's indicator (`org.tur.PaxOverlay1.ShowCommands`) |
-| `talk` | Hold Meta+Space | nothing | Voice is not built |
+| `talk` | Hold Meta+Space | nothing of its own (`bound` stays false) | The bar opened by the `ask` key: no release of Space within 350 ms means the key is held; the bar calls `StartListening` (push-to-talk) and `StopListening` on the release. **Not verified on KWin**: that the release reaches a layer-shell surface that took the keyboard while the key was held. If it never comes, the service's own limit ends the turn, and the microphone stays visibly on until then. The GlobalShortcuts portal's press and release is the follow-up |
 
 Each group that binds a key names its command (`X-TUR-Pax-Command`);
 `gen_commands.py --check` (the `boundary` job) now reads every group of a
@@ -220,7 +227,15 @@ cancelled holds until `CancelLocalModel`. The tests steer it over
 `org.tur.Agent1Fixture` (which recording, where to hold, what was called,
 whether a key was given).
 
-**Nobody writes the fixture.** The job `pax-ui-end-to-end` records it on
+**Voice is the exception.** The service's voice needs a microphone, so the
+recorder cannot drive it: `fixtures/voice/` is written by hand from
+[pax-voice.md](pax-voice.md) section 6, outside `fixtures/agent1/`, so the
+recorder neither writes nor compares it; each file says so in
+`hand_written`. A spoken turn holds where the person would stop speaking
+until `StopListening`; a live conversation holds before its end until
+`EndLiveSession`.
+
+**Nobody writes the fixture** (but `voice/`). The job `pax-ui-end-to-end` records it on
 every run (`desktop/tests/pax-ui/e2e.py record`) from `tur-pax serve`
 running exactly as the `pax` workflow runs it (`tests/pax/service_e2e.py`'s
 private bus, gnome-keyring, bubblewrap, the test service's tools, the
@@ -232,7 +247,8 @@ files differ from it in anything but times and identifiers.
 |---|---|
 | `tst_paxui_conversation` | Fed the recorded signals directly: a task streams in order (each step once, proposed then ended); a refused step carries the service's reason and code; a task stopped mid-step marks the step stopped and says so with `TUR-AI-TASK-003`; the day's limit is said once, by the system, with `TUR-AI-SPEND-001`; a refusal before the start is a card; tasks asked elsewhere or by a schedule are marked |
 | `tst_paxui_client` | The client's table equals the committed interface file; presence; parsed replies; refusals as codes and sentences; signals drive the conversation; a key reaches the service and stays nowhere in the client; `--stop` stops a running task; `--stop` never starts the service although the bus could, while the window may; an absent service |
-| `tst_conversation.qml` | Asking streams steps and the answer; steps arrive one signal at a time; a refused step says why; the data mark; Stop by button, by Meta+Esc and by typing "stop"; the spending limit card; cost in money when the price is known; absent, off, not ready; the keys from `commands.json`; Esc closes the bar; voice is later |
+| `tst_conversation.qml` | Asking streams steps and the answer; steps arrive one signal at a time; a refused step says why; the data mark; Stop by button, by Meta+Esc and by typing "stop"; the spending limit card; cost in money when the price is known; absent, off, not ready; the keys from `commands.json`; Esc closes the bar; voice off is said in the service's words, with setup |
+| `tst_voice.qml` | The microphone offered when voice is ready, and why not when it is off; pressing it opens the microphone through the service (`shown_by_caller`), lit with a level meter, the field read-only; pressed again it sends; Esc drops; what was heard in the field and the task that follows, the person's words marked spoken; a transcript that waits is sent by Enter as corrected; nothing heard; the held key listens and its release sends, a tap does not listen and types no space; a live conversation keeps the microphone lit, shows heard and said words and an interruption, and End or the stop key ends it; setup offers the free voice first with what it downloads, calls `PrepareVoice` with the size shown, a provider's live engine only with its consent ticked, "Not now" switches nothing on |
 | `tst_setup.qml` | Consent gates switching on and `Enable` gets the version shown; reviewed terms in DeepSeek's consent; local models with tiers, sizes, licences, the recommendation; a restricting licence must be accepted; download progress with real figures, then ready; cancel; providers' terms; the key goes to the service and the field forgets it; a refused key; only accepted settings; a setting out of range caught before sending; the service's refusal shown in its words; limits in tokens when the price is unknown; "Not now" switches nothing on |
 | `tst_activity.qml` | The recorded activity, newest first; a task opens to its decisions in words |
 | `tst_walks.qml` | For every state of `PaxHost.states` (29): contrast in both variants; gold only inside P@x's marks, both variants; keyboard and accessible names left-to-right and right-to-left; no clipped text at 200 %, right-to-left long, and both |
@@ -287,6 +303,12 @@ this task's):
    tasks; the view does not join them.
 7. **A refusal notice's code**: `TextAdded` `notice` carries no code; the
    code comes with `TaskFinished`.
+8. **The source of a task**: `TaskStarted` does not say that a request was
+   spoken; the window finds the spoken row by its words. A `source` in the
+   task document (`typed`, `voice`, `voice_edited`, `live`, as the audit's
+   `TUR_AI_SOURCE`) would make it exact.
+9. **Voice recorded in CI**: a stand-in microphone in the `pax` workflow, so
+   that `fixtures/voice/` can be recorded like the rest.
 
 ## 11. Decisions the owner may want to reverse
 
@@ -308,6 +330,15 @@ this task's):
 8. **The window may start the service** through D-Bus activation when a
    person opens it while P@x is off (to read its status); nothing else of
    tur-pax-ui does.
+9. **Voice after consent** in setup (consent → voice → ready), not right
+   after the model: voice is offered once P@x is on, and "Not now" switches
+   nothing on.
+10. **"ask-held"**, a new value of `org.tur.PaxUi1.Show` (the interface's
+    signature is unchanged), and the ask key moved from the desktop entry to
+    an action of its own, so that only the key, not the launcher, asks the
+    bar to listen while held.
+11. **The microphone and End are blue**, like Stop: they are the person's
+    controls, not P@x.
 
 ## 12. Known gaps
 
@@ -321,8 +352,41 @@ this task's):
   not work on the screen in this version.
 - **No real model, no real provider**: every answer in every test is the
   scripted provider's; the pictures show the scripted model's words.
-- **Voice** is not built.
+- **Voice has not run** (16 November 2026: GitHub Actions is disabled for
+  the owner's account, so no test of this document's voice part has run):
+  not against the real service, not with a microphone, not under KWin. The
+  held key's release reaching the bar is not verified. The pictures of the
+  states the bar changed (`ask`, `panel-*`, the setup's "Step n of m") and
+  of the new voice states have no reference yet: the `screenshots` job will
+  report them until `desktop/ci/update-references.py RUN_ID` takes CI's
+  pictures after they are looked at.
 - **Announcements** to a screen reader when a step arrives (X4) are not
   made: the kit has none yet.
 - **No collapse of long conversations**; the panel keeps every row of the
   session in memory and writes none to disk.
+
+## 13. Voice (16 November 2026)
+
+The window's side of [pax-voice.md](pax-voice.md); the service listens, the
+window shows. Files: `qml/VoiceControl.qml` (the microphone, its level, what
+it is doing, the turn), `qml/MicGlyph.qml` (a microphone in the kit's line
+style), `qml/SetupVoice.qml`, and voice in `src/agentclient.*`,
+`src/conversation.*`, `AskBar`, `ConversationPanel`, `ConversationEntry`,
+`SetupFlow`, `Main`.
+
+| Where | What |
+|---|---|
+| Ask bar and panel | "Speak to P@x": `StartListening` with `trigger` `button` and `shown_by_caller` (the window shows the lit microphone); while it listens the microphone is lit, a level meter moves with `VoiceLevel`, the field is read-only and says "Listening…"; the button again, or Enter, is `StopListening(turn, true)`; Esc is `StopListening(turn, false)`. "Recognising…"; then what was heard is in the field: with `check` `show` a task follows (the service started it) and the bar says "P@x goes on in 2 s · Esc to stop it" (Esc cancels the task); with `wait` the person may correct it and Enter sends it (`SendTranscript`), with the reason when another program was playing sound |
+| Voice off | The service's own sentence (`problem` of `GetVoiceStatus`) and "Set up voice" |
+| Push-to-talk | The `ask` key opens the bar as "ask-held"; no release of Space within 350 ms: `StartListening` with `push-to-talk`, and the release is `StopListening(turn, true)`; a tap types nothing and does not listen (section 6) |
+| Conversation | A spoken request is the person's words with "Spoken" in its caption (`spoken` role); in a live conversation, "heard" and "said" rows that grow until final, "Interrupted" under P@x's words the person cut off, and the system's cards when it starts and ends |
+| Live conversation | "Talk with P@x" when `GetVoiceStatus` says live is available: `StartLiveSession` with `shown_by_caller`. While it runs the panel's foot says "In conversation · the microphone is on" with the microphone lit, and End (`EndLiveSession`); Meta+Esc ends it too. The bar's microphone is not offered meanwhile |
+| Setup | After consent: "Speak to P@x", free and on this computer first: the recognition model and the voices with their download sizes, licences in plain words and credits; the language; "P@x answers out loud" (off); that P@x listens for no wake word; then live conversation, on this computer first and free, providers marked "Optional · paid with your own key" with the company their voice goes to and an estimate a minute; a provider needs its consent text's box ticked. "Download and switch on (187 MB)" calls `PrepareVoice` with the size shown, follows `VoiceProgress`, then `SetVoiceSettings`; "Not now" leaves voice off |
+
+**P@x's indicator** draws *listening* already (`org.tur.PaxOverlay1.SetActivity`
+under a lease); the service takes that lease while the microphone is open
+(pax-voice.md, section 4). No change to `tur-pax-overlay` was needed.
+
+**Gold** stays P@x's: the microphone, its level and End are the system's
+blue; `tst_walks` walks the new states (`ask-voice`, `ask-listening`,
+`ask-transcript-wait`, `live`, `setup-voice`, `setup-voice-live`) like the others.

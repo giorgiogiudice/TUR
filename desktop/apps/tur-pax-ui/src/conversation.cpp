@@ -63,6 +63,8 @@ QVariant Conversation::data(const QModelIndex &index, int role) const
         return entry.time;
     case DetailRole:
         return entry.detail;
+    case SpokenRole:
+        return entry.spoken;
     default:
         return QVariant();
     }
@@ -73,6 +75,7 @@ QHash<int, QByteArray> Conversation::roleNames() const
     return {
         { KindRole, "kind" },     { TextRole, "text" },   { TaskRole, "task" }, { StepRole, "step" },
         { StateRole, "phase" },   { CodeRole, "code" },   { TimeRole, "time" }, { DetailRole, "detail" },
+        { SpokenRole, "spoken" },
     };
 }
 
@@ -89,6 +92,8 @@ void Conversation::setClient(AgentClient *client)
         connect(m_client, &AgentClient::actionProposed, this, &Conversation::actionProposed);
         connect(m_client, &AgentClient::actionCompleted, this, &Conversation::actionCompleted);
         connect(m_client, &AgentClient::taskFinished, this, &Conversation::taskFinished);
+        connect(m_client, &AgentClient::voiceTranscript, this, &Conversation::voiceTranscript);
+        connect(m_client, &AgentClient::liveEvent, this, &Conversation::liveEvent);
         connect(m_client, &AgentClient::statusChanged, this, [this] {
             Q_EMIT spendChanged();
             Q_EMIT taskChanged();
@@ -181,7 +186,10 @@ int Conversation::findPending(const QString &request) const
 {
     for (int row = int(m_entries.size()) - 1; row >= 0; --row) {
         const Entry &entry = m_entries.at(row);
-        if (entry.kind == QLatin1String("you") && entry.state == QLatin1String("pending") && entry.text == request)
+        // A spoken request waits like a typed one; what was heard in a live
+        // conversation becomes a task's request when no task runs.
+        if (entry.kind == QLatin1String("you") && entry.text == request
+            && (entry.state == QLatin1String("pending") || entry.state == QLatin1String("heard")))
             return row;
     }
     return -1;
@@ -240,6 +248,177 @@ void Conversation::resume()
 {
     if (m_client)
         m_client->callWith(QStringLiteral("Resume"), {}, {});
+}
+
+void Conversation::sendTranscript(const QString &turn, const QString &text)
+{
+    const QString words = text.trimmed();
+    if (words.isEmpty() || turn.isEmpty())
+        return;
+    requested(words);
+    m_entries.last().spoken = true;
+    changed(int(m_entries.size()) - 1);
+    if (!m_client) {
+        startRefused(QStringLiteral("org.freedesktop.DBus.Error.ServiceUnknown"),
+                     tr("P@x's service is not on this computer."));
+        return;
+    }
+    const QPointer<Conversation> self(this);
+    m_client->callWith(QStringLiteral("SendTranscript"), { turn, words }, [self](const QVariantMap &reply) {
+        if (!self)
+            return;
+        if (!reply.value(QStringLiteral("ok")).toBool()) {
+            self->startRefused(reply.value(QStringLiteral("code")).toString(),
+                               reply.value(QStringLiteral("message")).toString());
+            return;
+        }
+        const QString task = reply.value(QStringLiteral("value")).toString();
+        if (self->m_starting && self->m_task.isEmpty())
+            self->setTask(task);
+    });
+}
+
+void Conversation::setLive(const QString &session, bool starting)
+{
+    if (session == m_liveSession && starting == m_liveStarting)
+        return;
+    m_liveSession = session;
+    m_liveStarting = starting;
+    Q_EMIT liveChanged();
+}
+
+void Conversation::startLive()
+{
+    if (live() || m_liveStarting)
+        return;
+    if (!m_client) {
+        startRefused(QStringLiteral("org.freedesktop.DBus.Error.ServiceUnknown"),
+                     tr("P@x's service is not on this computer."));
+        return;
+    }
+    setLive(QString(), true);
+    const QPointer<Conversation> self(this);
+    const QString options = QStringLiteral("{\"shown_by_caller\":true}");
+    m_client->callWith(QStringLiteral("StartLiveSession"), { options }, [self](const QVariantMap &reply) {
+        if (!self)
+            return;
+        if (!reply.value(QStringLiteral("ok")).toBool()) {
+            self->setLive(QString(), false);
+            Entry card;
+            card.kind = QStringLiteral("system");
+            card.state = QStringLiteral("refused");
+            card.code = reply.value(QStringLiteral("code")).toString();
+            card.text = reply.value(QStringLiteral("message")).toString();
+            self->append(card);
+            Q_EMIT self->attentionWanted();
+            return;
+        }
+        // LiveEvent "started" may have come first.
+        if (self->m_liveStarting)
+            self->setLive(reply.value(QStringLiteral("value")).toString(), false);
+    });
+}
+
+void Conversation::endLive()
+{
+    if (!m_client || (!live() && !m_liveStarting))
+        return;
+    m_client->callWith(QStringLiteral("EndLiveSession"), {}, {});
+}
+
+int Conversation::lastLiveRow(const QString &kind, const QString &state) const
+{
+    for (int row = int(m_entries.size()) - 1; row >= 0; --row) {
+        const Entry &entry = m_entries.at(row);
+        if (entry.kind == kind && entry.state == state && entry.detail.value(QStringLiteral("partial")).toBool())
+            return row;
+        if (entry.kind != kind)
+            continue;
+        return -1;
+    }
+    return -1;
+}
+
+void Conversation::voiceTranscript(const QString &turn, const QVariant &details)
+{
+    Q_UNUSED(turn)
+    const QVariantMap heard = details.toMap();
+    if (!heard.value(QStringLiteral("final"), true).toBool() || heard.value(QStringLiteral("empty")).toBool())
+        return;
+    const QString text = heard.value(QStringLiteral("text")).toString().trimmed();
+    if (text.isEmpty())
+        return;
+    // "show": a task follows, as for a typed request; "wait": the words are
+    // in the field until the person sends them (sendTranscript).
+    if (heard.value(QStringLiteral("check")).toString() != QLatin1String("show"))
+        return;
+    requested(text);
+    m_entries.last().spoken = true;
+    changed(int(m_entries.size()) - 1);
+}
+
+void Conversation::liveEvent(const QString &session, const QVariant &event)
+{
+    const QVariantMap said = event.toMap();
+    const QString kind = said.value(QStringLiteral("kind")).toString();
+    if (kind == QLatin1String("started")) {
+        setLive(session, false);
+        Entry card;
+        card.kind = QStringLiteral("system");
+        card.state = QStringLiteral("live-started");
+        card.task = session;
+        card.text = said.value(QStringLiteral("name")).toString();
+        card.detail = said;
+        append(card);
+        Q_EMIT attentionWanted();
+    } else if (kind == QLatin1String("heard") || kind == QLatin1String("said")) {
+        const bool person = kind == QLatin1String("heard");
+        const QString rowKind = person ? QStringLiteral("you") : QStringLiteral("pax");
+        const QString state = person ? QStringLiteral("heard") : QStringLiteral("said");
+        const bool complete = said.value(QStringLiteral("final"), true).toBool();
+        const QString text = said.value(QStringLiteral("text")).toString();
+        // Words still being heard or said grow in one row; the final words
+        // replace them.
+        const int row = lastLiveRow(rowKind, state);
+        if (row >= 0) {
+            Entry &entry = m_entries[row];
+            entry.text = text;
+            entry.detail.insert(QStringLiteral("partial"), !complete);
+            changed(row);
+        } else if (!text.trimmed().isEmpty()) {
+            Entry entry;
+            entry.kind = rowKind;
+            entry.state = state;
+            entry.task = session;
+            entry.text = text;
+            entry.spoken = true;
+            entry.detail = { { QStringLiteral("partial"), !complete } };
+            append(entry);
+        }
+    } else if (kind == QLatin1String("interrupted")) {
+        // P@x stopped speaking because the person spoke: its last words are
+        // marked so.
+        for (int row = int(m_entries.size()) - 1; row >= 0; --row) {
+            Entry &entry = m_entries[row];
+            if (entry.kind == QLatin1String("pax") && entry.state == QLatin1String("said")) {
+                entry.detail.insert(QStringLiteral("interrupted"), true);
+                entry.detail.insert(QStringLiteral("partial"), false);
+                changed(row);
+                break;
+            }
+        }
+    } else if (kind == QLatin1String("ended")) {
+        Entry card;
+        card.kind = QStringLiteral("system");
+        card.state = QStringLiteral("live-ended");
+        card.task = session;
+        card.code = said.value(QStringLiteral("error_code")).toString();
+        card.text = said.value(QStringLiteral("message")).toString();
+        card.detail = said;
+        append(card);
+        setLive(QString(), false);
+        Q_EMIT attentionWanted();
+    }
 }
 
 void Conversation::clear()

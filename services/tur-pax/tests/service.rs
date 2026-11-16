@@ -221,6 +221,12 @@ impl World {
         paths.runtime = Some(root.join("run"));
         // A stand-in for local AI, written by the tests that need one.
         paths.ai_local = root.join("tur-ai-local");
+        // Stand-ins for the sound server's programs and the list of live
+        // engines, written by the voice tests; absent otherwise.
+        paths.sound.record = root.join("pw-record");
+        paths.sound.play = root.join("pw-play");
+        paths.sound.dump = root.join("pw-dump");
+        paths.live = vec![root.join("live.json")];
         let mut initial = Settings::default();
         settings(&mut initial);
         initial
@@ -2112,4 +2118,283 @@ fn making_a_local_model_ready_can_be_stopped_and_one_at_a_time() {
     }
     // Nothing was chosen.
     assert_eq!(world.core.status()["provider"], Value::Null);
+}
+
+// ------------------------------------------------------------------ voice
+//
+// The voice of the service (docs/architecture/pax-voice.md) with stand-ins
+// for the sound server's programs and for local AI's speech commands. No
+// microphone, speaker or model is used.
+
+/// Write an executable script.
+fn voice_script(path: &Path, body: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::write(path, format!("#!/bin/sh\n{body}\n")).expect("written");
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("executable");
+}
+
+/// Stand-ins for a voice turn: a microphone that hears 2 s of loud sound
+/// and stays open, local AI that recognises `heard`, and a sound server on
+/// which `playing` names another program playing sound, or nothing.
+fn voice_world(name: &str, server: &FakeServer, heard: &str, playing: Option<&str>) -> World {
+    let world = World::ready(name, server);
+    voice_script(
+        &world.paths.sound.record,
+        "head -c 64000 /dev/zero | tr '\\000' '\\100'\nexec sleep 30",
+    );
+    let streams = playing.map_or_else(String::new, |program| {
+        format!(
+            r#"{{"type": "PipeWire:Interface:Node", "info": {{"state": "running", "props": {{"media.class": "Stream/Output/Audio", "application.name": "{program}"}}}}}}"#
+        )
+    });
+    voice_script(&world.paths.sound.dump, &format!("echo '[{streams}]'"));
+    let recommend = r#"{"schema_version":1,"kind":"speech-recommend","recognition":{"id":"whisper-base-q5-1","installed":true,"download_bytes":0},"vad":null,"voices":[{"language":"en","id":"voice-en-us-ljspeech-medium","installed":true,"download_bytes":0}],"download_bytes_needed":0,"free":true}"#;
+    let stt = format!(
+        r#"{{"schema_version":1,"kind":"stt","model":"whisper-base-q5-1","language":"en","text":"{heard}","audio_seconds":2.0,"seconds":0.1}}"#
+    );
+    voice_script(
+        &world.paths.ai_local,
+        &format!(
+            "echo \"$@\" >> \"$0.calls\"\ncase \"$1 $2\" in\n\"speech recommend\") echo '{recommend}' ;;\n\"speech stt\") test -s \"$3\" || exit 3; echo '{stt}' ;;\n*) echo 'TUR-AI-LOCAL-003' >&2; exit 1 ;;\nesac"
+        ),
+    );
+    world
+}
+
+fn transcript_of(world: &World, turn: &str) -> Value {
+    match world.events.wait_for(
+        |event| matches!(event, Event::VoiceTranscript { turn: id, .. } if id == turn),
+    ) {
+        Event::VoiceTranscript { details, .. } => details,
+        _ => unreachable!(),
+    }
+}
+
+fn calls_of(world: &World) -> String {
+    fs::read_to_string(world.root.join("tur-ai-local.calls")).unwrap_or_default()
+}
+
+#[test]
+fn voice_is_off_until_the_person_switches_it_on_and_nothing_listens_before() {
+    let server = FakeServer::start(Vec::new());
+    let world = voice_world("voice-off", &server, "hello", None);
+    assert_eq!(world.core.voice_name(), "off");
+    assert!(!world.core.microphone_open());
+    let refused = world
+        .core
+        .start_listening(r#"{"shown_by_caller": true}"#)
+        .expect_err("voice is off");
+    assert_eq!(code(refused), "TUR-AI-VOICE-001");
+    assert!(!calls_of(&world).contains("speech stt"));
+    let status = world.core.voice_status();
+    assert_eq!(status["enabled"], false);
+    assert_eq!(status["settings"]["activation"], "push-to-talk");
+    assert_eq!(status["wake_word"]["on"], false);
+    // A wake word cannot be switched on in this build.
+    let refused = world
+        .core
+        .set_voice_settings(r#"{"wake_word": true}"#)
+        .expect_err("no wake word");
+    assert_eq!(code(refused), "TUR-AI-VOICE-005");
+}
+
+#[test]
+fn a_spoken_turn_is_heard_shown_and_becomes_a_task_marked_as_voice() {
+    let server = FakeServer::start(vec![says("Done.")]);
+    let world = voice_world("voice-turn", &server, "Set the test value to night.", None);
+    world
+        .core
+        .set_voice_settings(r#"{"enabled": true}"#)
+        .expect("switched on");
+    assert_eq!(world.core.voice_name(), "ready");
+    let turn = world
+        .core
+        .start_listening(r#"{"trigger": "push-to-talk", "shown_by_caller": true}"#)
+        .expect("listening");
+    // The microphone is open, and every program can see it.
+    assert!(world.core.microphone_open());
+    assert_eq!(world.core.state_name(), "listening");
+    world.events.wait_for(|event| {
+        matches!(event, Event::VoiceStateChanged { state: "listening", details }
+            if details["microphone_open"] == true && details["indicator"] == "caller")
+    });
+    world
+        .events
+        .wait_for(|event| matches!(event, Event::VoiceLevel { level, .. } if *level > 0.5));
+    // The person lets go of the key.
+    world.core.stop_listening(&turn, true).expect("stopped");
+    assert!(!world.core.microphone_open());
+    let details = transcript_of(&world, &turn);
+    assert_eq!(details["text"], "Set the test value to night.");
+    assert_eq!(details["check"], "show");
+    assert_eq!(details["other_sound"], false);
+    let task = details["task"].as_str().expect("a task").to_owned();
+    let result = world.events.finished(&task);
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["request"], "Set the test value to night.");
+    // The trail says where the request came from, and keeps no words.
+    let started = world.trail_events("task_started");
+    assert_eq!(started[0]["TUR_AI_SOURCE"], "voice");
+    assert_eq!(started[0]["TUR_AI_VOICE_TRIGGER"], "push-to-talk");
+    let trail = fs::read_to_string(&world.paths.audit).expect("the trail");
+    assert!(!trail.contains("night"));
+    // The audio given to recognition is gone.
+    let left: Vec<_> = fs::read_dir(world.root.join("run/tur-pax/voice"))
+        .map(|entries| entries.flatten().collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "{left:?}");
+    let calls = calls_of(&world);
+    assert!(calls.contains("speech stt"), "{calls}");
+    assert!(calls.contains("--model whisper-base-q5-1"), "{calls}");
+}
+
+#[test]
+fn a_turn_heard_while_another_program_plays_sound_waits_for_the_person() {
+    let server = FakeServer::start(vec![says("Done.")]);
+    let world = voice_world("voice-other", &server, "Confirm.", Some("Firefox"));
+    world
+        .core
+        .set_voice_settings(r#"{"enabled": true}"#)
+        .expect("switched on");
+    let turn = world
+        .core
+        .start_listening(r#"{"shown_by_caller": true}"#)
+        .expect("listening");
+    world.core.stop_listening(&turn, true).expect("stopped");
+    let details = transcript_of(&world, &turn);
+    assert_eq!(details["check"], "wait");
+    assert_eq!(details["reason"], "other_sound");
+    assert!(details.get("task").is_none_or(Value::is_null));
+    assert_eq!(world.core.voice_name(), "waiting");
+    assert!(world.trail_events("task_started").is_empty());
+    // The person reads it, corrects it and sends it.
+    let task = world
+        .core
+        .send_transcript(&turn, "Show me the test value.")
+        .expect("sent");
+    world.events.finished(&task);
+    assert_eq!(
+        world.trail_events("task_started")[0]["TUR_AI_SOURCE"],
+        "voice_edited"
+    );
+    assert_eq!(world.core.voice_name(), "ready");
+    // A transcript is sent once.
+    assert_eq!(
+        code(world.core.send_transcript(&turn, "again").expect_err("gone")),
+        "TUR-AI-SERVICE-007"
+    );
+}
+
+#[test]
+fn stop_closes_the_microphone_and_nothing_heard_is_recognised() {
+    let server = FakeServer::start(Vec::new());
+    let world = voice_world("voice-stop", &server, "anything", None);
+    world
+        .core
+        .set_voice_settings(r#"{"enabled": true}"#)
+        .expect("switched on");
+    let turn = world
+        .core
+        .start_listening(r#"{"trigger": "button", "shown_by_caller": true}"#)
+        .expect("listening");
+    assert!(world.core.microphone_open());
+    // The stop key: there is no task, and the microphone was open.
+    world.core.cancel_task("").expect("stopped");
+    assert!(!world.core.microphone_open());
+    assert_eq!(world.core.voice_name(), "ready");
+    assert_eq!(
+        code(world.core.stop_listening(&turn, true).expect_err("ended")),
+        "TUR-AI-SERVICE-007"
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!calls_of(&world).contains("speech stt"));
+    // Esc drops a turn the same way.
+    let turn = world
+        .core
+        .start_listening(r#"{"shown_by_caller": true}"#)
+        .expect("listening");
+    world.core.stop_listening(&turn, false).expect("dropped");
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!calls_of(&world).contains("speech stt"));
+}
+
+#[test]
+fn the_microphone_never_opens_unseen_and_a_live_session_needs_the_indicator() {
+    let server = FakeServer::start(Vec::new());
+    let world = voice_world("voice-unseen", &server, "anything", None);
+    voice_script(
+        &world.paths.sound.record,
+        &format!(
+            "touch {}\nexec sleep 30",
+            world.root.join("recorded").display()
+        ),
+    );
+    world
+        .core
+        .set_voice_settings(r#"{"enabled": true}"#)
+        .expect("switched on");
+    // Nothing shows it: no indicator on this bus, and the caller does not
+    // say it shows it.
+    let refused = world.core.start_listening("").expect_err("unseen");
+    assert_eq!(code(refused), "TUR-AI-VOICE-004");
+    // A live session lasts: the caller's word is not enough.
+    let refused = world
+        .core
+        .start_live_session(r#"{"shown_by_caller": true}"#)
+        .expect_err("unseen");
+    assert_eq!(code(refused), "TUR-AI-VOICE-004");
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!world.root.join("recorded").exists());
+    assert!(!world.core.microphone_open());
+}
+
+#[test]
+fn a_provider_s_live_engine_needs_consent_that_names_the_company() {
+    let server = FakeServer::start(Vec::new());
+    let world = voice_world("voice-consent", &server, "anything", None);
+    fs::write(
+        world.root.join("live.json"),
+        include_str!("../data/live.json"),
+    )
+    .expect("the list");
+    let refused = world
+        .core
+        .set_voice_settings(r#"{"live": {"engine": "openai-realtime"}}"#)
+        .expect_err("no consent");
+    assert_eq!(code(refused), "TUR-AI-VOICE-007");
+    let status = world.core.voice_status();
+    let engines = status["live"]["engines"]
+        .as_array()
+        .expect("engines")
+        .clone();
+    assert_eq!(engines[0]["id"], "local");
+    assert_eq!(engines[0]["paid"], false);
+    let openai = engines
+        .iter()
+        .find(|engine| engine["id"] == "openai-realtime")
+        .expect("listed");
+    assert_eq!(openai["paid"], true);
+    assert_eq!(openai["consent_current"], false);
+    assert!(
+        openai["consent_text"]
+            .as_str()
+            .is_some_and(|text| text.contains("streamed to OpenAI"))
+    );
+    world
+        .core
+        .set_voice_settings(r#"{"live": {"engine": "openai-realtime"}, "live_consent_version": "1"}"#)
+        .expect("accepted");
+    let status = world.core.voice_status();
+    assert_eq!(status["settings"]["live"]["engine"], "openai-realtime");
+    assert_eq!(status["free"], false);
+    let openai = status["live"]["engines"]
+        .as_array()
+        .and_then(|engines| {
+            engines
+                .iter()
+                .find(|engine| engine["id"] == "openai-realtime")
+                .cloned()
+        })
+        .expect("listed");
+    assert_eq!(openai["consent_current"], true);
 }

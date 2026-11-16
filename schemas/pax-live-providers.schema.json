@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-live-providers.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "P@x live engines",
+  "description": "The providers' live (speech-to-speech) engines P@x can talk through: /etc/tur/pax/live.json if it exists, else /usr/share/tur/pax/live.json (docs/architecture/pax-voice.md, section 5). The local engine is not listed: it is always offered. The loader in services/tur-pax (livelist.rs) is authoritative and also enforces: identifiers are unique and not local; the family is one TUR's provider layer speaks; an address is wss://, or ws:// only to an address of this computer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "as_of", "providers"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "status": { "enum": ["example", "reviewed"] },
+    "as_of": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "note": { "type": "string" },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "company", "family", "keyring_item", "models"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+          "name": { "type": "string" },
+          "company": { "description": "The company the person's voice is streamed to.", "type": "string" },
+          "family": { "enum": ["openai-realtime", "gemini-live"] },
+          "base_url": { "type": ["string", "null"], "pattern": "^(wss://|ws://(127\\.|localhost|\\[::1\\]))" },
+          "key_header": { "type": ["string", "null"] },
+          "keyring_item": { "type": "string" },
+          "terms_url": { "type": ["string", "null"] },
+          "data_terms": { "type": ["string", "null"] },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "prices": {
+                  "description": "Per million tokens.",
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["currency", "audio_input", "audio_output", "text_input", "text_output"],
+                  "properties": {
+                    "currency": { "type": "string" },
+                    "audio_input": { "type": "number", "minimum": 0 },
+                    "audio_output": { "type": "number", "minimum": 0 },
+                    "text_input": { "type": "number", "minimum": 0 },
+                    "text_output": { "type": "number", "minimum": 0 },
+                    "cached_input": { "type": ["number", "null"], "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          "voices": { "type": "array", "items": { "type": "string" } },
+          "transcription_model": { "type": ["string", "null"] },
+          "built": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

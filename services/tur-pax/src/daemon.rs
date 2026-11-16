@@ -5,7 +5,9 @@
 //!
 //! ```text
 //! tur-pax serve [--bus <address>] [--tools <dir>] [--manifests <dir>]
-//!               [--adapters <dir>] [--models <file>]
+//!               [--adapters <dir>] [--models <file>] [--ai-local <file>]
+//!               [--pw-record <file>] [--pw-play <file>] [--pw-dump <file>]
+//!               [--live <file>]
 //! tur-pax schedule wake [--bus <address>]
 //! tur-pax key set <provider> [--bus <address>]      the key is read from standard input
 //! tur-pax key remove <provider> [--bus <address>]
@@ -95,6 +97,20 @@ pub struct ServeArgs {
     /// The program of local AI. Without it, /usr/bin/tur-ai-local.
     #[arg(long, value_name = "FILE")]
     pub ai_local: Option<PathBuf>,
+    /// The sound server's capture program. Without it, /usr/bin/pw-record.
+    #[arg(long, value_name = "FILE")]
+    pub pw_record: Option<PathBuf>,
+    /// The sound server's playback program. Without it, /usr/bin/pw-play.
+    #[arg(long, value_name = "FILE")]
+    pub pw_play: Option<PathBuf>,
+    /// The sound server's description of itself. Without it,
+    /// /usr/bin/pw-dump.
+    #[arg(long, value_name = "FILE")]
+    pub pw_dump: Option<PathBuf>,
+    /// The list of live engines. Without it, /etc/tur/pax/live.json if it
+    /// exists, then /usr/share/tur/pax/live.json.
+    #[arg(long, value_name = "FILE")]
+    pub live: Option<PathBuf>,
 }
 
 /// The `schedule` subcommands.
@@ -188,6 +204,18 @@ pub fn run_serve(args: &ServeArgs, err: &mut dyn Write) -> io::Result<u8> {
     paths.extra_adapters.clone_from(&args.adapters);
     if let Some(models) = &args.models {
         paths.models = vec![models.clone()];
+    }
+    if let Some(program) = &args.pw_record {
+        paths.sound.record.clone_from(program);
+    }
+    if let Some(program) = &args.pw_play {
+        paths.sound.play.clone_from(program);
+    }
+    if let Some(program) = &args.pw_dump {
+        paths.sound.dump.clone_from(program);
+    }
+    if let Some(list) = &args.live {
+        paths.live = vec![list.clone()];
     }
     if let Some(program) = &args.ai_local {
         paths.ai_local.clone_from(program);

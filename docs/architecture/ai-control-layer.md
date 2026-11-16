@@ -855,3 +855,20 @@ the TUR image.
 | 3 | How the person knows how to stop P@x | **The stop combination and P@x's other keyboard commands are visible at all times** while P@x is switched on, in P@x's indicator, with the full list one action away. |
 | 4 | Testing against a real provider | The owner has supplied a short-lived Anthropic key for CI. It is used only by a manually started workflow with a hard limit on requests and tokens per run, never on pull requests, and never printed. |
 
+## 24. Resolutions from building voice (16 November 2026)
+
+Building P@x's voice ([pax-voice.md](pax-voice.md), report
+[pax-voice-1](../reports/pax-voice-1.md)) settled points section 9 left
+open. Where an earlier section says otherwise, this section governs.
+**Nothing of it has run** (GitHub Actions was disabled for the owner's
+account).
+
+| # | Point | Resolution |
+|---|---|---|
+| 1 | What "the transcript is shown before acting" means | A spoken request's class 0 actions run at once; its first action above class 0 waits until the transcript has been on screen for `show_seconds` (2 s) or the person sent it. A request the person took back makes no change (`TUR-AI-VOICE-008`) |
+| 2 | Sound from another program while the person speaks | The turn is never sent by itself: the transcript waits for the person to send it on screen. Spoken approval, when it exists, is refused then |
+| 3 | Barge-in without echo cancellation | The person's key, the microphone button and Stop interrupt P@x's speech. The person's voice does only when the capture is echo-cancelled; otherwise what the microphone hears while P@x speaks is dropped as P@x's own sound |
+| 4 | Who opens the microphone | The session service, through PipeWire's own capture program, only while P@x's indicator or the asking window shows that it listens; a live conversation only with the indicator |
+| 5 | A provider's live engine | A provider-neutral session interface in the provider layer; every tool call of a live model goes through the same task loop and policy engine as a text model's. Consent per provider says the voice is streamed to the company; the day's limit counts its audio |
+| 6 | Spoken approval of class 2 | Not available in this build: no approval path exists (section 23, item 1), and the setting that would allow it belongs to the policy store. `voice::approval` encodes the rule of section 5.2 for when they exist: class 3 and 4 never, class 2 only with the setting, push-to-talk in the same exchange, and no other sound and no sound of P@x's own |
+| 7 | The wake word | Off, and refused when asked for (`TUR-AI-VOICE-005`): no detector is built. Its explanation is written |

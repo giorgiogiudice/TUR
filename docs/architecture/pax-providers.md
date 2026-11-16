@@ -1078,3 +1078,141 @@ has no declared settings and no known price.
   shipped preset offers it.
 - The model lists' answers were written from the documentation; none was
   read from a provider.
+
+## 16. Live sessions (speech to speech)
+
+Added on 16 November 2026 for P@x's voice ([pax-voice.md](pax-voice.md)).
+**Nothing in this section has been run**: not against a provider and not in
+CI (GitHub Actions is disabled for the owner's account). The code was
+written from the providers' documentation, read that day.
+
+A live session is a conversation in sound: the person's audio goes in as it
+is spoken, the model's audio comes out as it is made, transcripts come back
+both ways, the person can interrupt, and the model can call tools. One
+provider-neutral interface serves every live engine, as `Provider` does for
+text (`src/live.rs`):
+
+| Item | What it is |
+|---|---|
+| `LiveSession` | `send_audio(samples, rate)`, `send_text`, `send_tool_result`, `interrupt(played_ms)`, `next_event(wait)`, `close`; blocking, on one thread |
+| `LiveEvent` | `Audio`, `Said` (the model's words), `Heard` (the person's words), `SpeechStarted` (barge-in), `ToolCall`, `Usage`, `TurnDone`, `Closed` |
+| `LiveConfig` | family, model (configuration, never compiled in), address, key header, voice, P@x's instructions, the tools, prices, the model that transcribes the person (configuration) |
+| `connect_live` | the WebSocket handshake and the session's setup |
+| `ScriptedLive` | a session that plays a script (audio in, events and tool calls out), for tests of this layer and of P@x's loop |
+
+**The model never acts.** A `ToolCall` is a proposal. Its arguments, and
+every message a live service sends, are read with `strict`: a repeated key
+anywhere ends the session as malformed (`TUR-AI-PROVIDER-007`), exactly as
+for the text families. P@x decides each call with the policy engine and
+answers with `send_tool_result`. Images in a tool result are replaced by a
+sentence saying they cannot be sent in a live session.
+
+**Transport.** `src/ws.rs`, a small blocking WebSocket client (RFC 6455)
+over rustls with the bundled web PKI roots, the TLS this crate's HTTP client
+already uses. It adds no crate: `rustls` 0.23.46 and `webpki-roots` 1.0.12
+were in every lockfile through `ureq`, with `ring` as the crypto provider,
+and became direct dependencies (each lockfile's `tur-pax-providers` entry
+gained the two names). SHA-1 (for the handshake check) and base64 (for
+audio) are written in the module. Addresses are `wss://` only, except
+`ws://` to a loopback address (`localhost`, 127.0.0.0/8, `::1`) for a model
+server on this computer: the same rule as the text families' `http`.
+
+### 16.1 Families
+
+| Family | Address and key | Built | Run |
+|---|---|---|---|
+| `openai-realtime` | `wss://api.openai.com/v1/realtime?model=<model>`; `Authorization: Bearer`; no `OpenAI-Beta` header (generally available interface) | Yes | Never |
+| ″ Azure OpenAI | `wss://<resource>.openai.azure.com/openai/v1/realtime?model=<deployment>`, `key_header` `api-key` | By configuration | Never |
+| ″ xAI Grok voice agent | `wss://api.x.ai/v1/realtime?model=grok-voice-3.0`, bearer key. "Largely compatible" with OpenAI's protocol by xAI's account; its transcripts arrive as cumulative `.updated` events, which this adapter does not read | By configuration, not checked | Never |
+| ″ llama.cpp `llama-server` on this computer | `ws://127.0.0.1:<port>/v1/realtime` (mainline b12431, merged 2026-10-28: turn-based, tools and `function_call_output`), with LiquidAI's LFM3-Audio-2B or LFM3-Omni-2B. Their LFM Open License v1.0 is free only below 10 million USD of annual revenue; LFM3-Audio's voice chat is English only | Configured only | Not measured |
+| `gemini-live` | `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=<key>`: the key in the query, as the documentation shows, or a header by configuration (`x-goog-api-key` is not confirmed by the pages read) | Yes | Never |
+| `scripted` | none | Yes | In tests |
+
+**Not built, and why:**
+
+| What | Why |
+|---|---|
+| OpenAI Realtime over WebRTC | Needs a DTLS/SRTP stack; the WebSocket transport serves a program on the computer |
+| OpenAI Realtime over SIP | For telephone calls into a service; not P@x's case |
+| OpenAI's GPT-Live (`gpt-live-1`, `wss://api.openai.com/v1/live/sessions`) | A different protocol (the model delegates tool work to a backend model); its availability (general or preview) is not stated |
+| Amazon Nova 2 Sonic | Bedrock's `InvokeModelWithBidirectionalStream`: an HTTP/2 event stream signed with AWS SigV4, not a WebSocket |
+| Anthropic | No live, realtime or speech API: its models take text and images and give text (models overview, read 16 November 2026) |
+| Mistral | No speech-to-speech model; realtime transcription and text to speech to be chained with a model (from search results, not read in full) |
+
+### 16.2 What each family sends and reads
+
+**`openai-realtime`** (`src/live_openai.rs`). Setup: one `session.update`
+with `type` `realtime`, the model, P@x's instructions, `output_modalities`
+`["audio"]`, 16-bit PCM at 24 kHz in and out, `server_vad` turn detection
+with `create_response` and `interrupt_response`, transcription of the
+person's audio, the voice if configured, and the tools as function tools
+with `tool_choice` `auto`. Out: `input_audio_buffer.append` (the person's
+audio converted to 24 kHz), a user message and `response.create` for typed
+words, a `function_call_output` item and `response.create` for a tool's
+result (a failure as `{"error": …}`), and for barge-in `response.cancel`
+plus `conversation.item.truncate` at the milliseconds actually played. In:
+`response.output_audio.delta`, `response.output_audio_transcript.delta` and
+`.done`, `response.output_text.*`,
+`conversation.item.input_audio_transcription.delta` and `.completed`,
+`input_audio_buffer.speech_started`, `response.function_call_arguments.done`,
+`response.done` (its usage, with cached input taken apart), and `error`: an
+invalid key, an exhausted quota, a rate limit and a server error map to
+their codes; `response_cancel_not_active`, which a barge-in can race, is
+passed over; any other error ends the session. The model that transcribes
+the person is configuration (`LiveConfig::transcription_model`, from the
+list of live engines: `gpt-4o-mini-transcribe` in the example list); without
+one no transcript of the person is asked for.
+
+**`gemini-live`** (`src/live_gemini.rs`). Setup: `setup` with
+`models/<model>`, `generationConfig.responseModalities` `["AUDIO"]` and the
+voice in `generationConfig.speechConfig` (**where these two go on the wire
+is not verified**: the reference lists `generationConfig` as a setup field,
+the guides show the SDK's flattened form), P@x's instructions as
+`systemInstruction`, the tools as `functionDeclarations`, automatic activity
+detection, and transcription both ways; the server's `setupComplete` is
+awaited before anything else is sent. Out: `realtimeInput.audio` (16-bit PCM
+at 16 kHz), `realtimeInput.text`, `toolResponse.functionResponses`
+(`{"output": …}` or `{"error": …}`). In: `serverContent` (`modelTurn` audio
+at the rate its MIME type gives, 24 kHz otherwise; `inputTranscription`;
+`outputTranscription`; `interrupted`, read as the person speaking;
+`turnComplete`), `toolCall.functionCalls`, and `usageMetadata`, taken as the
+turn's usage (whether Google's counts are cumulative is not stated in what
+was read). Barge-in: Google's activity detection ends the model's turn
+itself; there is no client message to cancel a turn while it is on, so
+`interrupt` drops the sound still queued and the caller stops playing. JSON
+in binary frames is read too.
+
+### 16.3 Prices (read 16 November 2026; USD per million tokens)
+
+| Model | Audio in | Cached in | Audio out | Text in | Text out |
+|---|---|---|---|---|---|
+| `gpt-realtime-2.1`, `gpt-realtime-2` | 32.00 | 0.40 | 64.00 | 4.00 | 24.00 |
+| `gpt-realtime-1.5`, `gpt-realtime` | 32.00 | 0.40 | 64.00 | 4.00 | 16.00 |
+| `gpt-realtime-2.1-mini`, `gpt-realtime-mini` | 10.00 | 0.30 | 20.00 | 0.60 | 2.40 |
+| `gemini-3.8-live` (also its extended-thinking variant and `gemini-3.1-flash-live-preview`) | 3.00 | | 12.00 | 0.75 | 4.50 |
+| `gemini-2.5-flash-native-audio-preview-12-2025` | 3.00 | | 12.00 | 0.50 | 2.00 |
+
+Token rates as the pages state them: OpenAI one token per 100 ms of the
+person's audio and one per 50 ms of the model's (600 and 1 200 a minute);
+Google 32 tokens a second either way. `LivePrices::per_minute_estimate`
+prices a minute of each: about 0.096 USD for `gpt-realtime-2.1`, 0.030 for
+`gpt-realtime-2.1-mini`, 0.029 for `gemini-3.8-live`. It is a floor: the
+providers count the conversation again with every response, and text comes
+on top. OpenAI keeps realtime data 30 days for abuse monitoring and does not
+train on it (eligible for zero data retention); Google does not use paid-tier
+data to improve its products, and does on the free tier. Sessions end at 60
+minutes (OpenAI) and at 15 minutes of audio without compression (Google,
+with connections of about 10 minutes; session resumption is not built).
+
+### 16.4 Tests (`tests/live.rs`, `src/ws.rs`, `src/live.rs`; none has run)
+
+| What | Test |
+|---|---|
+| SHA-1 against the standard vectors; RFC 6455's handshake example; base64 round trips; masked frames of every length class; server frames read whole or not at all; broken frames refused; fragments put together; addresses `wss`, or `ws` to this computer only; handshake refusals by status | `ws::tests` |
+| Family names, resampling, audio in base64, the price of a minute, a repeated key in a tool call | `live::tests` |
+| OpenAI: the setup, Azure's address, every message out, every documented event in, barge-in's cancel and truncation, usage with cached input and its price, error kinds | `openai_*` |
+| Gemini: the setup, the key in the query, every message out, content, interruption, turn end, usage by modality, tool calls | `gemini_*` |
+| A repeated key in a tool call's arguments or in a message, and text that is not JSON, end the session as malformed, in both families | `a_repeated_key_anywhere_ends_the_session_as_malformed` |
+| The scripted session: audio in, a heard turn and a tool call out, the result awaited, sound and words out, an interruption, the end | `a_scripted_session_plays_audio_in_events_and_tool_calls_out` |
+| Refusals: the scripted family, `ws://` to another computer, a model name that is not one; the key never in an error or a `Debug` | `connect_refuses_what_it_must_and_never_shows_the_key` |
+| A whole OpenAI Realtime session over a WebSocket on the loopback interface: the handshake with the bearer key and the model, the setup, audio converted from 16 to 24 kHz, a tool call answered, the model's sound, the turn's end, a normal close | `an_openai_realtime_session_over_a_loopback_websocket` |

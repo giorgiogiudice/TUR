@@ -261,7 +261,7 @@ Item {
             }
         }
 
-        function test_the_bar_closes_on_escape_and_voice_is_later() {
+        function test_the_bar_closes_on_escape_and_says_when_voice_is_off() {
             host.reach(host.state("ask"), this)
             closeSpy.target = host.view
             const field = findChild(host.view, "askField")
@@ -269,8 +269,14 @@ Item {
             field.forceActiveFocus()
             keyClick(Qt.Key_Escape)
             compare(closeSpy.count, 1)
-            verify(!findChild(host.view, "speakButton").enabled, "speaking is not in this version")
-            compare(findChild(host.view, "voiceLater").text, Words.voiceLater)
+            // Voice is off until the person switches it on; the bar says so
+            // in the service's words and offers setup (tst_voice.qml has the
+            // rest of voice).
+            tryVerify(() => host.client.voice === "off", 5000, "the voice status was read")
+            const off = findChild(host.view, "voiceOff")
+            verify(off !== null && off.visible, "the bar says that voice is off")
+            compare(findChild(host.view, "voiceOffText").text, host.client.voiceStatus.problem.message)
+            verify(findChild(host.view, "voiceSetupButton").visible)
         }
 
         function test_the_bar_sends_and_the_panel_takes_over() {

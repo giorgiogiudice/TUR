@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: the Hugging Face API tree of
+# ggml-org/whisper-vad at the pinned revision; snakers4/silero-vad's
+# licence; whisper.cpp's models/download-vad-model.sh (supported versions).
+
+schema_version = 1
+id = "silero-vad-v6.2.0"
+kind = "voice-activity"
+name = "Silero VAD 6.2.0"
+publisher = "Silero (snakers4/silero-vad), ggml conversion by ggml-org"
+engine = "whisper.cpp"
+repository = "https://huggingface.co/ggml-org/whisper-vad"
+revision = "9ffd54a1e1ee413ddf265af9913beaf518d1639b"
+parameters = "about 2M"
+languages = ["mul"]
+default_for = []
+# Estimate: the file and the small state of the detector.
+memory_bytes = 20000000
+speed_basis = "not measured; the detector is a small fraction of recognition time"
+note = "Finds where speech is in a recording, so that the recogniser is given only speech and does not invent words in silence."
+credit = "none"
+checked = "2026-11-16"
+
+[[files]]
+name = "ggml-silero-v6.2.0.bin"
+url = "https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin"
+size_bytes = 885098
+sha256 = "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"
+
+[licence]
+id = "MIT"
+url = "https://github.com/snakers4/silero-vad/blob/master/LICENSE"
+summary = "MIT License. You may use, copy, change and share the model for any purpose, commercial use included, if the copyright and licence notice go with it."
+restrictions = "none"
+evidence = "snakers4/silero-vad's repository licence is MIT; the card of ggml-org/whisper-vad declares MIT."
+checked = "2026-11-16"

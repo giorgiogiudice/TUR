@@ -59,8 +59,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::{Map, Value, json};
 use tur_pax_memory::{RecalledNotes, SecretKind};
 use tur_pax_providers::{
-    ErrorKind, FinishReason, Message, Part, Provider, ProviderConfig, ProviderError, SpendMeter,
-    StreamEvent, ToolCall, ToolResult, Usage,
+    ErrorKind, FinishReason, LiveEvent, LivePrices, LiveSession, LiveUsage, Message, Part,
+    Provider, ProviderConfig, ProviderError, SpendMeter, StreamEvent, ToolCall, ToolResult, Usage,
 };
 
 use crate::action::{Action, AgentOperation};
@@ -83,6 +83,7 @@ use crate::sandbox::{Grant, GrantRules, Limits, SandboxPlan, is_system_visible};
 use crate::store::HeldApprovals;
 use crate::strict;
 use crate::trail::{DecisionSink, EventKind, Trail, TrailEvent, identifier};
+use crate::voice::{Gate, Interjections, Source, TRANSCRIPT_WAIT_MAX, TranscriptGate, Trigger};
 
 /// The system text of every request. It is fixed: nothing a tool returned,
 /// nothing recalled from memory and nothing the user typed is ever part of
@@ -223,6 +224,22 @@ impl TaskLimits {
         TaskLimits {
             tool_result_bytes: context_tokens.map(tool_result_budget),
             ..self
+        }
+    }
+
+    /// The limits of a live conversation, when `live`: an hour (the
+    /// longest session a provider's live engine keeps, OpenAI's) and 60
+    /// tool calls. Unchanged otherwise.
+    #[must_use]
+    pub fn for_live(self, live: bool) -> Self {
+        if live {
+            TaskLimits {
+                max_steps: 60,
+                max_seconds: 3600,
+                ..self
+            }
+        } else {
+            self
         }
     }
 }
@@ -621,7 +638,65 @@ pub struct TaskRequest<'a> {
     /// Notes recalled from memory for this request. They are placed in the
     /// conversation only in the frame the memory layer gives them.
     pub recalled: &'a RecalledNotes,
+    /// Where the request came from: typed, spoken, or said in a live
+    /// conversation. It never adds authority; for a spoken request it adds
+    /// a wait (the transcript first, `docs/architecture/pax-voice.md`).
+    pub origin: RequestOrigin<'a>,
 }
+
+/// Where a request came from, and what comes with a spoken one.
+///
+/// Nothing here can make the loop do more: a gate only holds changes back,
+/// and what a person says during a task is added to the conversation as
+/// their words, as if typed.
+#[derive(Debug, Clone, Copy)]
+pub struct RequestOrigin<'a> {
+    /// Typed, spoken, changed after it was heard, or live: `TUR_AI_SOURCE`.
+    pub source: Source,
+    /// What started a spoken request: `TUR_AI_VOICE_TRIGGER`.
+    pub trigger: Option<Trigger>,
+    /// For a spoken request: no action above class 0 runs until the gate
+    /// is open, that is until the transcript has been on screen long
+    /// enough or the person sent it. A withdrawn gate refuses the change.
+    pub gate: Option<&'a TranscriptGate>,
+    /// What the person says while the task runs, added at its next step.
+    pub interjections: Option<&'a Interjections>,
+}
+
+impl RequestOrigin<'static> {
+    /// A typed request.
+    pub const TYPED: RequestOrigin<'static> = RequestOrigin {
+        source: Source::Typed,
+        trigger: None,
+        gate: None,
+        interjections: None,
+    };
+}
+
+/// What a live conversation's audio goes through: the microphone and the
+/// speaker, as the session service runs them. The loop never touches a
+/// device; it asks this.
+pub trait LiveIo {
+    /// What the microphone heard since the last call, 16 kHz mono. Empty
+    /// while what it hears must not be sent: P@x's own voice playing
+    /// without echo cancellation.
+    fn take_audio(&mut self) -> Vec<i16>;
+    /// Play P@x's voice.
+    fn play(&mut self, samples: &[i16], rate: u32);
+    /// Stop P@x's voice now. Returns how many milliseconds of it were
+    /// played, for the provider to cut its record of the answer there.
+    fn stop_playing(&mut self) -> u64;
+    /// What the person said, as the engine recognised it.
+    fn heard(&mut self, text: &str, final_text: bool);
+    /// What P@x said.
+    fn said(&mut self, text: &str, final_text: bool);
+    /// Whether the session is to end now, and why: `person`, `silence`.
+    fn should_end(&mut self) -> Option<&'static str>;
+}
+
+/// How long the live loop waits for the provider before it looks at the
+/// microphone and the stop control again.
+const LIVE_POLL: Duration = Duration::from_millis(20);
 
 /// What a task did and how it ended.
 #[derive(Debug, Clone, PartialEq)]
@@ -724,6 +799,8 @@ struct Session<'t> {
     items: Vec<ReportItem>,
     answer: String,
     steps: u32,
+    gate: Option<&'t TranscriptGate>,
+    interjections: Option<&'t Interjections>,
 }
 
 /// One tool call of a response, with the text its arguments were read from.
@@ -1023,6 +1100,55 @@ fn char_floor(text: &str, index: usize) -> usize {
     index
 }
 
+/// The `task_started` event: who the provider is, whether a person is
+/// there, and where the request came from. Never its words.
+fn started_event(task: &TaskRequest<'_>, session: &Session<'_>, attended: &'static str) -> TrailEvent {
+    let mut event = TrailEvent::new(EventKind::TaskStarted, session.task, session.provider)
+        .with("TUR_AI_PROVIDER_ID", session.provider_id.clone())
+        .with("TUR_AI_ATTENDED", attended)
+        .with("TUR_AI_SOURCE", task.origin.source.as_str());
+    if let Some(trigger) = task.origin.trigger {
+        event = event.with("TUR_AI_VOICE_TRIGGER", trigger.as_str());
+    }
+    event
+}
+
+/// A live engine's usage as the token counts the day's record keeps.
+fn live_tokens(usage: &LiveUsage) -> Usage {
+    Usage {
+        input_tokens: usage
+            .audio_input_tokens
+            .saturating_add(usage.text_input_tokens),
+        output_tokens: usage
+            .audio_output_tokens
+            .saturating_add(usage.text_output_tokens),
+        cached_input_tokens: usage.cached_input_tokens,
+        estimated: false,
+    }
+}
+
+/// Two usage reports of a live session added up. Each report of a live
+/// engine is the usage of one response, not a running total.
+fn add_live_usage(total: &LiveUsage, more: &LiveUsage) -> LiveUsage {
+    LiveUsage {
+        audio_input_tokens: total
+            .audio_input_tokens
+            .saturating_add(more.audio_input_tokens),
+        audio_output_tokens: total
+            .audio_output_tokens
+            .saturating_add(more.audio_output_tokens),
+        text_input_tokens: total
+            .text_input_tokens
+            .saturating_add(more.text_input_tokens),
+        text_output_tokens: total
+            .text_output_tokens
+            .saturating_add(more.text_output_tokens),
+        cached_input_tokens: total
+            .cached_input_tokens
+            .saturating_add(more.cached_input_tokens),
+    }
+}
+
 /// The task loop and everything it works with.
 ///
 /// Every field is supplied by the caller. None of them can raise what the
@@ -1087,6 +1213,8 @@ impl Orchestrator<'_> {
             items: Vec::new(),
             answer: String::new(),
             steps: 0,
+            gate: task.origin.gate,
+            interjections: task.origin.interjections,
         };
         let mut stop = self.drive(task, history, meter, &mut session);
 
@@ -1124,6 +1252,172 @@ impl Orchestrator<'_> {
             usage: meter.usage(),
             cost: meter.cost(),
             currency: meter.currency().map(str::to_owned),
+        }
+    }
+
+    /// Run one live conversation with a provider's live engine
+    /// (`docs/architecture/pax-voice.md`, section 5).
+    ///
+    /// The engine listens and speaks; this loop carries the audio between
+    /// it and `io`, and **handles every tool call the engine makes exactly
+    /// as [`Orchestrator::run`] handles a text model's**: one reading of
+    /// the arguments, the action from the manifest, the policy engine's
+    /// decision recorded first, performed only if allowed, the result
+    /// framed as data. The engine never acts by itself. The day's limit is
+    /// kept with the engine's own usage reports and its audio prices.
+    ///
+    /// The session ends when `io` says so (the person, a silence), on the
+    /// stop control, at the time limit, at the step limit (tool calls), at
+    /// the day's limit, or when the engine closes.
+    pub fn run_live(
+        &mut self,
+        task: &TaskRequest<'_>,
+        live: &mut dyn LiveSession,
+        io: &mut dyn LiveIo,
+        prices: Option<&LivePrices>,
+    ) -> TaskReport {
+        let family = live.family().as_str();
+        let mut session = Session {
+            task: task.task_id,
+            provider: family,
+            provider_id: identifier(task.provider_id.unwrap_or(family)),
+            context: self.situation.context(),
+            started: self.clock.elapsed(),
+            items: Vec::new(),
+            answer: String::new(),
+            steps: 0,
+            gate: task.origin.gate,
+            interjections: task.origin.interjections,
+        };
+        let mut usage = LiveUsage::default();
+        let mut stop = self.drive_live(task, live, io, prices, &mut session, &mut usage);
+        live.close();
+        io.stop_playing();
+
+        let tokens = live_tokens(&usage);
+        let cost = prices.map(|prices| prices.cost(&usage));
+        let mut finished = TrailEvent::new(EventKind::TaskFinished, session.task, session.provider)
+            .with("TUR_AI_PROVIDER_ID", session.provider_id.clone())
+            .with("TUR_AI_OUTCOME", stop.outcome.as_str())
+            .with("TUR_AI_STEPS", session.steps.to_string())
+            .with("TUR_AI_REQUESTS", "0")
+            .with("TUR_AI_TOKENS", tokens.total_tokens().to_string());
+        if let Some(code) = &stop.code {
+            finished = finished.with("TUR_ERROR_CODE", code.clone());
+        }
+        if self.trail.event(&finished).is_err() && stop.outcome != TaskOutcome::AuditUnavailable {
+            stop = Stop::audit();
+            session.answer.clear();
+        }
+        if stop.outcome != TaskOutcome::Completed {
+            let notice = ReportItem::Notice {
+                code: stop.code.clone(),
+                message: stop.message.clone(),
+            };
+            self.observer.item(&notice);
+            session.items.push(notice);
+        }
+        TaskReport {
+            outcome: stop.outcome,
+            error_code: stop.code,
+            message: stop.message,
+            answer: session.answer,
+            items: session.items,
+            steps: session.steps,
+            requests: 0,
+            usage: tokens,
+            cost,
+            currency: prices.map(|prices| prices.currency.clone()),
+        }
+    }
+
+    fn drive_live(
+        &mut self,
+        task: &TaskRequest<'_>,
+        live: &mut dyn LiveSession,
+        io: &mut dyn LiveIo,
+        prices: Option<&LivePrices>,
+        session: &mut Session<'_>,
+        usage: &mut LiveUsage,
+    ) -> Stop {
+        let started = started_event(task, session, "yes");
+        if self.trail.event(&started).is_err() {
+            return Stop::audit();
+        }
+        let mut said = String::new();
+        loop {
+            if let Some(stop) = self.between_steps(session) {
+                return stop;
+            }
+            if io.should_end().is_some() {
+                return Stop::completed();
+            }
+            if self.budget.exhausted() {
+                return Stop::with_code(TaskOutcome::SpendLimit, TaskCode::DayLimitReached);
+            }
+            let audio = io.take_audio();
+            if !audio.is_empty()
+                && let Err(error) = live.send_audio(&audio, crate::voice::SAMPLE_RATE)
+            {
+                return Stop::provider(TaskOutcome::ProviderError, &error);
+            }
+            let Some(event) = live.next_event(LIVE_POLL) else {
+                continue;
+            };
+            match event {
+                LiveEvent::Audio { samples, rate } => io.play(&samples, rate),
+                LiveEvent::Said { text, final_text } => {
+                    io.said(&text, final_text);
+                    if final_text {
+                        if !said.is_empty() {
+                            said.push('\n');
+                        }
+                        said.push_str(&text);
+                        session.answer.clone_from(&said);
+                    }
+                }
+                LiveEvent::Heard { text, final_text } => io.heard(&text, final_text),
+                LiveEvent::SpeechStarted => {
+                    // Barge-in: the person speaks over P@x.
+                    let played = io.stop_playing();
+                    if let Err(error) = live.interrupt(played) {
+                        return Stop::provider(TaskOutcome::ProviderError, &error);
+                    }
+                }
+                LiveEvent::ToolCall {
+                    call,
+                    arguments_text,
+                } => {
+                    if session.steps >= self.limits.max_steps {
+                        return Stop::with_code(TaskOutcome::StepLimit, TaskCode::TaskStepLimit);
+                    }
+                    session.steps += 1;
+                    let proposed = ProposedCall {
+                        call,
+                        text: arguments_text,
+                    };
+                    let result = match self.handle(session, &proposed) {
+                        Ok(result) => result,
+                        Err(stop) => return stop,
+                    };
+                    if let Err(error) = live.send_tool_result(&result) {
+                        return Stop::provider(TaskOutcome::ProviderError, &error);
+                    }
+                }
+                LiveEvent::Usage(reported) => {
+                    *usage = add_live_usage(usage, &reported);
+                    let cost = prices.map(|prices| prices.cost(usage));
+                    self.budget.used(live_tokens(usage), cost);
+                    if self.budget.exhausted() {
+                        return Stop::with_code(TaskOutcome::SpendLimit, TaskCode::DayLimitReached);
+                    }
+                }
+                LiveEvent::TurnDone => {}
+                LiveEvent::Closed { error: Some(error) } => {
+                    return Stop::provider(TaskOutcome::ProviderError, &error);
+                }
+                LiveEvent::Closed { error: None } => return Stop::completed(),
+            }
         }
     }
 
@@ -1167,9 +1461,7 @@ impl Orchestrator<'_> {
         } else {
             "no"
         };
-        let started = TrailEvent::new(EventKind::TaskStarted, session.task, session.provider)
-            .with("TUR_AI_PROVIDER_ID", session.provider_id.clone())
-            .with("TUR_AI_ATTENDED", attended);
+        let started = started_event(task, session, attended);
         if self.trail.event(&started).is_err() {
             return Stop::audit();
         }
@@ -1298,6 +1590,15 @@ impl Orchestrator<'_> {
                 match handled {
                     Ok(result) => results.push(Part::ToolResult(result)),
                     Err(stop) => return stop,
+                }
+            }
+            // What the person said while P@x worked: their own words, as
+            // if typed, after the results.
+            if let Some(said) = session.interjections {
+                for words in said.take() {
+                    results.push(Part::text(format!(
+                        "While you were working, the person said: {words}"
+                    )));
                 }
             }
             history.push(Message::user(results));
@@ -1548,6 +1849,34 @@ impl Orchestrator<'_> {
             });
         }
 
+        // 3b. A spoken request: no change before what was heard has been
+        //     shown long enough or sent by the person. Observing never
+        //     waits.
+        if runs
+            && decision.class() >= ActionClass::Reversible
+            && let Some(gate) = session.gate
+        {
+            let sent = self.wait_for_transcript(gate)?;
+            if !sent {
+                let code = TaskCode::VoiceTranscriptNotSent;
+                self.approval_unavailable(session, &proposal.action, &decision, code)?;
+                report.decision = "refused";
+                report.error_code = Some(code.as_str().to_owned());
+                report.message = Some(code.user_message().to_owned());
+                self.note(session, ReportItem::Proposal(report));
+                return Ok(ToolResult::error(
+                    call.id.clone(),
+                    call.name.clone(),
+                    refusal_text(
+                        "transcript_not_sent",
+                        code.as_str(),
+                        code.user_message(),
+                        None,
+                    ),
+                ));
+            }
+        }
+
         // 4. What the decision means here.
         let result = match decision.verdict() {
             Verdict::Allow if decision.class() <= ActionClass::Reversible => {
@@ -1682,6 +2011,29 @@ impl Orchestrator<'_> {
         };
         self.note(session, ReportItem::Proposal(report));
         Ok(result)
+    }
+
+    /// Wait at a spoken task's gate. `Ok(true)` once it opens; `Ok(false)`
+    /// if the person withdrew the request or did not send it in time.
+    fn wait_for_transcript(&self, gate: &TranscriptGate) -> Result<bool, Stop> {
+        let started = self.clock.elapsed();
+        loop {
+            match gate.state() {
+                Gate::Open => return Ok(true),
+                Gate::Withdrawn => return Ok(false),
+                Gate::Shut => {}
+            }
+            if self.control.signal() == Signal::Cancel {
+                return Err(Stop::with_code(
+                    TaskOutcome::Cancelled,
+                    TaskCode::TaskCancelled,
+                ));
+            }
+            if self.clock.elapsed().saturating_sub(started) >= TRANSCRIPT_WAIT_MAX {
+                return Ok(false);
+            }
+            self.clock.sleep(PAUSE_POLL);
+        }
     }
 
     /// Perform one of P@x's own operations. What it returns passes the

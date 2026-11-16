@@ -26,6 +26,11 @@
 //! * [`spend`] adds up what a task used and enforces its limit.
 //! * [`strict`] is the JSON parser that refuses a repeated key. Everything a
 //!   provider sends is read through it.
+//! * [`live`] is the interface of live sessions (speech to speech, with tool
+//!   calls) whatever the engine; [`live_openai`] and [`live_gemini`] are its
+//!   two families (OpenAI's Realtime API, which also serves Azure OpenAI and
+//!   compatible servers by configuration, and Google's Gemini Live API),
+//!   over a small WebSocket client of this crate's own.
 //!
 //! The interface is blocking and has no async runtime: a stream is an iterator,
 //! and a caller runs a provider call on a thread of its own.
@@ -86,6 +91,9 @@ pub mod generation;
 pub mod google;
 mod http;
 pub mod listing;
+pub mod live;
+pub mod live_gemini;
+pub mod live_openai;
 pub mod model;
 pub mod openai;
 pub mod openai_chat;
@@ -96,11 +104,16 @@ pub mod spend;
 mod sse;
 pub mod strict;
 mod toolcalls;
+mod ws;
 
 pub use config::{Prices, ProviderConfig, RetryPolicy, TaskLimit, Timeouts};
 pub use error::{ErrorKind, ProviderError};
 pub use generation::{Effort, Generation, ReasoningStyle};
 pub use listing::{ListedModel, list_models};
+pub use live::{
+    LiveConfig, LiveEvent, LiveFamily, LivePrices, LiveSession, LiveUsage, ScriptStep,
+    ScriptReceived, ScriptedLive, connect_live,
+};
 pub use model::{
     FinishReason, Image, Message, OpaquePart, Part, ProviderId, Request, ResultContent, Role,
     StreamEvent, ToolCall, ToolDefinition, ToolResult, Turn, Usage,

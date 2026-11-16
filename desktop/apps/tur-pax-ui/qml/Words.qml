@@ -15,7 +15,112 @@ QtObject {
     readonly property string askPlaceholder: qsTr("Ask or tell P@x…")
     readonly property string send: qsTr("Send")
     readonly property string speak: qsTr("Speak")
-    readonly property string voiceLater: qsTr("Speaking to P@x is coming later. For now, type.")
+
+    // --- voice (docs/architecture/pax-voice.md, section 7) ---------------------
+    readonly property string speakToPax: qsTr("Speak to P@x")
+    readonly property string stopListening: qsTr("Stop listening and send")
+    readonly property string listening: qsTr("Listening…")
+    readonly property string recognising: qsTr("Recognising…")
+    readonly property string voiceNothingHeard: qsTr("Nothing was heard. Press the microphone and speak again.")
+    readonly property string voiceDropped: qsTr("What was heard was dropped.")
+    readonly property string voiceShow: qsTr("Heard. P@x goes on in 2 s · Esc to stop it")
+    readonly property string voiceWait: qsTr("Heard. Correct it if you need to, then press Enter to send.")
+    readonly property string voiceWaitOtherSound: qsTr("Another program was playing sound while you spoke, so this waits for you: press Enter to send it.")
+    readonly property string voiceOffHint: qsTr("Speaking to P@x is switched off.")
+    readonly property string voiceSetUp: qsTr("Set up voice")
+    readonly property string voiceHoldHint: qsTr("Hold the key and speak; let go to send.")
+    readonly property string spokenTag: qsTr("Spoken")
+    readonly property string talkWithPax: qsTr("Talk with P@x")
+    readonly property string inConversation: qsTr("In conversation · the microphone is on")
+    readonly property string endConversation: qsTr("End")
+    readonly property string endConversationName: qsTr("End the conversation with P@x")
+    readonly property string interrupted: qsTr("Interrupted")
+    readonly property string liveStarted: qsTr("Conversation started")
+    readonly property string liveEnded: qsTr("Conversation ended")
+
+    // The voice's own state, in words: what the microphone mark says.
+    function voiceState(state: string): string {
+        switch (state) {
+        case "listening":
+            return words.listening
+        case "recognising":
+            return words.recognising
+        case "speaking":
+            return qsTr("P@x is speaking")
+        case "live":
+            return words.inConversation
+        default:
+            return ""
+        }
+    }
+
+    // Why a live conversation ended.
+    function liveEndReason(reason: string): string {
+        switch (reason) {
+        case "person":
+            return qsTr("You ended it.")
+        case "silence":
+            return qsTr("It ended after a while of silence.")
+        case "stop":
+            return qsTr("It was stopped.")
+        case "limit":
+            return qsTr("A spending limit was reached.")
+        case "error":
+            return qsTr("It could not go on.")
+        default:
+            return ""
+        }
+    }
+
+    // --- voice in setup -----------------------------------------------------------
+    readonly property string voiceTitle: qsTr("Speak to P@x")
+    readonly property string voiceFree: qsTr("Free, on this computer")
+    readonly property string voiceFreeText: qsTr("What you say is recognised on this computer, and P@x's voice is made here too. Nothing you say leaves this computer, and it costs nothing. Small models are downloaded once.")
+    readonly property string voiceRecognition: qsTr("Recognising what you say")
+    readonly property string voiceVoices: qsTr("P@x's voice")
+    readonly property string voiceLanguage: qsTr("Language")
+    readonly property string voiceAutomatic: qsTr("The language I speak (found automatically)")
+    readonly property string voiceAnswersAloud: qsTr("P@x answers out loud")
+    readonly property string voiceAnswersAloudText: qsTr("Off: P@x's answers are written. On: they are also spoken in the local voice.")
+    readonly property string voiceHow: qsTr("Hold P@x's key and speak; let go to send. Or press the microphone in the bar. The microphone is open only while P@x shows that it listens.")
+    readonly property string liveTitle: qsTr("Live conversation")
+    readonly property string liveText: qsTr("Talk with P@x while it works: it says what it is doing, and you can interrupt it or change what you asked. The microphone stays on until you end the conversation, or until a while of silence.")
+    readonly property string liveLocal: qsTr("On this computer · free")
+    readonly property string liveOptional: qsTr("Optional · paid with your own key")
+    readonly property string downloadAndSwitchOn: qsTr("Download and switch on")
+    readonly property string switchVoiceOn: qsTr("Switch voice on")
+    readonly property string voiceNotNow: qsTr("Not now")
+    readonly property string voiceReady: qsTr("Voice is ready.")
+    readonly property string wakeWordOff: qsTr("P@x does not listen for a wake word. It listens only while you hold its key or press the microphone.")
+
+    function voiceSentTo(company: string): string {
+        return qsTr("Your voice is sent to %1 while the conversation runs.").arg(company)
+    }
+
+    function liveConsentBox(company: string): string {
+        return qsTr("I understand that my voice is sent to %1.").arg(company)
+    }
+
+    function perMinute(amount: var, currency: string): string {
+        if (amount === null || amount === undefined)
+            return ""
+        return qsTr("About %1 a minute (an estimate)").arg(words.money(amount, currency))
+    }
+
+    function voiceDownload(bytes: var): string {
+        if (!(Number(bytes) > 0))
+            return words.downloaded
+        return qsTr("Downloads %1 once").arg(words.bytes(bytes))
+    }
+
+    function voiceProgress(event: var): string {
+        switch (event.event) {
+        case "ready":
+            return words.voiceReady
+        default:
+            return words.progress(event)
+        }
+    }
     readonly property string keysTitle: qsTr("P@x's keys")
     readonly property string stop: qsTr("Stop")
     readonly property string pause: qsTr("Pause")
@@ -233,6 +338,10 @@ QtObject {
             return qsTr("P@x started a scheduled task")
         case "provider_refused":
             return qsTr("The AI declined")
+        case "live-started":
+            return words.liveStarted
+        case "live-ended":
+            return words.liveEnded
         default:
             return qsTr("P@x could not finish")
         }

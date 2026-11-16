@@ -5,7 +5,8 @@
 Sections 1 to 5 are the design. Section 6 records the engine decision and its
 evidence, section 7 what is built (`services/tur-ai-local`), section 8 what
 deviates from the design and what is open, section 9 what the image holds,
-section 10 the second list of models and the tiers, section 11 `ensure`.
+section 10 the second list of models and the tiers, section 11 `ensure`,
+section 12 speech for P@x's voice.
 Measurements: [report local-ai-1](../reports/local-ai-1.md),
 [report pax-6](../reports/pax-6.md).
 
@@ -71,7 +72,9 @@ model, and so can any application that speaks the common OpenAI-compatible API.
 3. P@x's `local` provider preset; the scenario suite against a local model
    in CI.
 4. Settings and application-centre pages (desktop tasks).
-5. Local speech (recognition and synthesis) in the same service.
+5. Local speech (recognition and synthesis) in the same service. **In
+   progress** (16 November 2026): section 12 and
+   [pax-voice.md](pax-voice.md).
 6. Measurements on the test PC's graphics card.
 
 Items 1 and 2 are done in their first slice (sections 6 and 7). Item 3 is
@@ -413,3 +416,42 @@ large are refused before any download, with a `failed` event; `cancel`
 leaves its request; every event follows the schema. The local-ai workflow's
 `pax` job runs one real `ensure` of Ministral 3 3B from Mistral's
 repository, then a P@x task through it.
+
+## 12. Speech
+
+Added on 16 November 2026 for P@x's voice (work item 5). The design, the
+engine choices and their evidence are in [pax-voice.md](pax-voice.md),
+sections 3 and 9; this section says what `tur-ai-local` gained. **Nothing of
+it has run**: GitHub Actions is disabled for the owner's account.
+
+- **The speech catalogue**: `services/tur-ai-local/speech/*.toml`
+  (`schemas/speech-model.schema.json`, `src/speech.rs`), installed to
+  `/usr/share/tur/ai-local/speech/`: four Whisper models in ggml form
+  (`whisper-tiny-q5-1`, `whisper-base-q5-1`, `whisper-small-q5-1`,
+  `whisper-large-v3-turbo-q5-0`; MIT), the Silero voice detector
+  (`silero-vad-v6.2.0`; MIT) and six Piper voices whose licences are clean
+  through their whole training chain (English, Italian, German, Spanish,
+  French). Every file is pinned to a commit of its publisher's repository
+  with its size and SHA-256, as for models; nothing is in the image.
+- **Tiers** as for models (*runs well*, *slow*, *does not fit*) with reasons
+  in words; for recognition, from a published encode time scaled to this
+  processor (pax-voice.md, 3.3). Every voice runs well everywhere.
+- **Commands** (`tur-ai-local speech …`, JSON with `--json`,
+  `schemas/ai-local-speech.schema.json`): `models`, `recommend`, `ensure`
+  (the same checked, resumable download as `ensure`, with
+  `speech-ensure-event` lines), `cancel`, `remove`, `stt FILE --model ID
+  [--language L] [--vad]` (a 16 kHz mono 16-bit WAVE file to whisper.cpp's
+  `whisper-cli`, environment cleared) and `tts --voice ID --output FILE`
+  (text on standard input to Piper). Codes `TUR-AI-LOCAL-030` to `-035`.
+- **The store**: `<models folder>/speech/<id>/` with its record of
+  verification; the models listing does not count that folder as an unknown
+  model.
+- **The engines** are separate programs: whisper.cpp v1.9.5's `whisper-cli`,
+  built from source in the image like llama.cpp, and Piper 1.8.0 (a GPL
+  program) from its pinned wheel (image/README.md, "Speech").
+  `tur-ai-local` opens no microphone and plays nothing; P@x's service does.
+- **Tests**: `tests/speech.rs` (catalogue rules, tiers on the recorded
+  machines, the command lines and reports with stand-in engines); the
+  `pax-voice` workflow, started by hand, runs the real engines on TUR's own
+  synthetic English and Italian sentences and measures the word error rate,
+  the wait and the peak memory of each model.
